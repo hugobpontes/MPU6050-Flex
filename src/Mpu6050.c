@@ -13,7 +13,8 @@
 /**
  * @brief Type representing a structure containing all configurable parameters in the Mpu6050 library.
  */
-typedef struct Mpu6050ConfigStruct{
+typedef struct Mpu6050ConfigStruct
+{
 	IOFunc_t pIOWrite;
 	IOFunc_t pIORead;
 } Mpu6050Config_t;
@@ -21,8 +22,8 @@ typedef struct Mpu6050ConfigStruct{
 
 static Mpu6050Config_t Mpu6050Config =
 {
-		.pIORead = 0,
-		.pIOWrite = 0
+	.pIORead = 0,
+	.pIOWrite = 0
 };
 
 /**
