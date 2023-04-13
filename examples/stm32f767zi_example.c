@@ -17,8 +17,11 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
+#include <Mpu6050Flex.h>
 #include "main.h"
 
+#include <stdlib.h>
+#include <string.h>
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
@@ -40,6 +43,10 @@
 
 /* Private variables ---------------------------------------------------------*/
 
+I2C_HandleTypeDef hi2c2;
+
+UART_HandleTypeDef huart4;
+
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -47,12 +54,52 @@
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_I2C2_Init(void);
+static void MX_UART4_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+static IOStatus_t Stm32f767zi_I2C_Write(uint8_t Address,uint32_t Size,uint8_t* DataPtr)
+{
+
+	IOStatus_t Status = IO_SUCCESS;
+	HAL_StatusTypeDef HAL_Status;
+
+	uint8_t* WritePointer = (uint8_t*) malloc(Size+1);
+	memcpy(WritePointer,&Address,1);
+	memcpy(WritePointer+1,&DataPtr,Size);
+
+	HAL_Status = HAL_I2C_Master_Transmit(&hi2c2, MPU6050_I2C_ADDRESS<<1, WritePointer, Size+1, 100);
+
+	free(WritePointer);
+
+	if (HAL_Status != HAL_OK)
+	{
+		Status = IO_FAILURE;
+	}
+	return Status;
+}
+
+static IOStatus_t Stm32f767zi_I2C_Read(uint8_t Address,uint32_t Size,uint8_t* DataPtr)
+{
+	IOStatus_t Status = IO_SUCCESS;
+	HAL_StatusTypeDef HAL_Status;
+
+	HAL_Status = HAL_I2C_Master_Transmit(&hi2c2, MPU6050_I2C_ADDRESS<<1, &Address, 1, 100);
+	HAL_Delay(1);
+	if (HAL_Status == HAL_OK)
+	{
+		HAL_Status = HAL_I2C_Master_Receive(&hi2c2, MPU6050_I2C_ADDRESS<<1, DataPtr, Size, 100);
+		if (HAL_Status != HAL_OK)
+		{
+			Status = IO_FAILURE;
+		}
+	}
+	return Status;
+}
 
 /* USER CODE END 0 */
 
@@ -84,8 +131,17 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_I2C2_Init();
+  MX_UART4_Init();
   /* USER CODE BEGIN 2 */
 
+  uint8_t RcvdData = 0xEE;
+  HAL_UART_Transmit(&huart4, &RcvdData, 1, 100);
+
+  Mpu6050Flex_SetIOWrite(Stm32f767zi_I2C_Write);
+  Mpu6050Flex_SetIORead(Stm32f767zi_I2C_Read);
+
+  uint8_t ID;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -93,8 +149,11 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-	  HAL_Delay(1000);
+	  ID = Mpu6050Flex_WhoAmI();
+
 	  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_7);
+	  HAL_UART_Transmit(&huart4, &ID, 1, 100);
+	  HAL_Delay(1500);
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -142,6 +201,89 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief I2C2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C2_Init(void)
+{
+
+  /* USER CODE BEGIN I2C2_Init 0 */
+
+  /* USER CODE END I2C2_Init 0 */
+
+  /* USER CODE BEGIN I2C2_Init 1 */
+
+  /* USER CODE END I2C2_Init 1 */
+  hi2c2.Instance = I2C2;
+  hi2c2.Init.Timing = 0x00303D5B;
+  hi2c2.Init.OwnAddress1 = 0;
+  hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c2.Init.OwnAddress2 = 0;
+  hi2c2.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c2, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c2, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C2_Init 2 */
+
+  /* USER CODE END I2C2_Init 2 */
+
+}
+
+/**
+  * @brief UART4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_UART4_Init(void)
+{
+
+  /* USER CODE BEGIN UART4_Init 0 */
+
+  /* USER CODE END UART4_Init 0 */
+
+  /* USER CODE BEGIN UART4_Init 1 */
+
+  /* USER CODE END UART4_Init 1 */
+  huart4.Instance = UART4;
+  huart4.Init.BaudRate = 115200;
+  huart4.Init.WordLength = UART_WORDLENGTH_8B;
+  huart4.Init.StopBits = UART_STOPBITS_1;
+  huart4.Init.Parity = UART_PARITY_NONE;
+  huart4.Init.Mode = UART_MODE_TX_RX;
+  huart4.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart4.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart4.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart4.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN UART4_Init 2 */
+
+  /* USER CODE END UART4_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -151,6 +293,9 @@ static void MX_GPIO_Init(void)
   GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOF_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */

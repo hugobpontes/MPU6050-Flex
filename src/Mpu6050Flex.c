@@ -1,13 +1,13 @@
 /**
  ********************************************************************************
- * @file    Mpu6050.c
+ * @file    Mpu6050Flex.c
  * @author  Hugo Pontes
  * @date    12/04/2023
  * @brief   Flexible mpu6050 that can be used on any microcontroller
  ********************************************************************************
  */
 
-#include "Mpu6050.h"
+#include <Mpu6050Flex.h>
 #include <stdint.h>
 
 /**
@@ -23,7 +23,7 @@ typedef struct Mpu6050ConfigStruct
 static Mpu6050Config_t Mpu6050Config =
 {
 	.pIORead = 0,
-	.pIOWrite = 0
+	.pIOWrite = 0,
 };
 
 /**
@@ -31,7 +31,7 @@ static Mpu6050Config_t Mpu6050Config =
  *
  * @param pWriteFunc Function Pointer that points to the IO Write function to use
  */
-void Mpu6050_SetIOWrite(IOFunc_t pWriteFunc)
+void Mpu6050Flex_SetIOWrite(IOFunc_t pWriteFunc)
 {
 	Mpu6050Config.pIOWrite = pWriteFunc;
 }
@@ -40,7 +40,7 @@ void Mpu6050_SetIOWrite(IOFunc_t pWriteFunc)
  *
  * @param pWriteFunc Function Pointer that points to the IO Read function to use
  */
-void Mpu6050_SetIORead(IOFunc_t pReadFunc)
+void Mpu6050Flex_SetIORead(IOFunc_t pReadFunc)
 {
 	Mpu6050Config.pIORead = pReadFunc;
 }
@@ -49,7 +49,7 @@ void Mpu6050_SetIORead(IOFunc_t pReadFunc)
  *
  * @return Pointer to the currently set IO write function pointer
  */
-IOFunc_t Mpu6050_GetIOWrite()
+IOFunc_t Mpu6050Flex_GetIOWrite()
 {
 	return Mpu6050Config.pIOWrite;
 }
@@ -58,9 +58,20 @@ IOFunc_t Mpu6050_GetIOWrite()
  *
  * @return Pointer to the currently set IO read function pointer
  */
-IOFunc_t Mpu6050_GetIORead()
+IOFunc_t Mpu6050Flex_GetIORead()
 {
 	return Mpu6050Config.pIORead;
 }
+/**
+ * @brief Requests the i2c address of the mpu6050 device via i2c, used to verify working i2c interface
+ *
+ * @return I2C Address of the MPU6050
+ */
+uint8_t Mpu6050Flex_WhoAmI()
+{
+	uint8_t Response;
+	Mpu6050Config.pIORead(REG_WHO_AM_I,1,&Response);
 
+	return Response;
+}
 
