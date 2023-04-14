@@ -70,7 +70,7 @@ static IOStatus_t Stm32f767zi_I2C_Write(uint8_t Address,uint32_t Size,uint8_t* D
 
 	uint8_t* WritePointer = (uint8_t*) malloc(Size+1);
 	memcpy(WritePointer,&Address,1);
-	memcpy(WritePointer+1,&DataPtr,Size);
+	memcpy(WritePointer+1,DataPtr,Size);
 
 	HAL_Status = HAL_I2C_Master_Transmit(&hi2c2, MPU6050_I2C_ADDRESS<<1, WritePointer, Size+1, 100);
 
@@ -142,18 +142,31 @@ int main(void)
   Mpu6050Flex_SetIORead(Stm32f767zi_I2C_Read);
 
   uint8_t ID;
-  /* USER CODE END 2 */
+  ID = Mpu6050Flex_WhoAmI();
+  HAL_UART_Transmit(&huart4, &ID, 1, 100);
 
+ Mpu6050Flex_WakeUp();
+ Mpu6050Flex_ConfigSampleRateDivider(0xCC);
+  /* USER CODE END 2 */
+uint8_t RxData = 0xDE;
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    /* USER CODE END WHILE */
-	  ID = Mpu6050Flex_WhoAmI();
 
+
+	  Stm32f767zi_I2C_Read(REG_SAMPLE_RATE_DIVIDER,1,&RxData);
 	  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_7);
-	  HAL_UART_Transmit(&huart4, &ID, 1, 100);
-	  HAL_Delay(1500);
+	  HAL_UART_Transmit(&huart4, &RxData, 1, 100);
+
+	  /*Stm32f767zi_I2C_Read(REG_WHO_AM_I,1,&RxData);
+	  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_7);
+	  HAL_UART_Transmit(&huart4, &RxData, 1, 100);*/
+
+	  HAL_Delay(500);
+    /* USER CODE END WHILE */
+
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
