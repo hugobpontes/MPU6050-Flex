@@ -155,7 +155,7 @@ uint8_t RxData = 0xDE;
   {
 
 
-	  Stm32f767zi_I2C_Read(REG_SAMPLE_RATE_DIVIDER,1,&RxData);
+	  Stm32f767zi_I2C_Read(REG_SMPRT_DIV,1,&RxData);
 	  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_7);
 	  HAL_UART_Transmit(&huart4, &RxData, 1, 100);
 
