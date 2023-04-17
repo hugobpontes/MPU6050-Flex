@@ -24,16 +24,20 @@ typedef enum
     IO_SUCCESS,
 	IO_FAILURE,
 } IOStatus_t;
-
+/**
+ * @brief Enum containing possible return values for Mpu6050Flex functions
+ */
 typedef enum
 {
     MPU6050FLEX_SUCCESS,
 	MPU6050FLEX_FAILURE,
 } MPU6050Flex_Status_t;
-
-//refer to register map to see what these options are about
+/**
+ * @brief Enum containing valid digital low pass filter configuration options
+ */
 typedef enum
 {
+	//refer to mpu6050 register map to see what these options are about
     MPU6050FLEX_DLPF_CFG0 = 0x00,
 	MPU6050FLEX_DLPF_CFG1 = 0x01,
 	MPU6050FLEX_DLPF_CFG2 = 0x02,
@@ -43,7 +47,9 @@ typedef enum
 	MPU6050FLEX_DLPF_CFG6 = 0x06,
 	MPU6050FLEX_DLPF_CFG7 = 0x07,
 } MPU6050Flex_DLPF_Options_t;
-
+/**
+ * @brief Enum containing containing valid gyro full scall range options
+ */
 typedef enum
 {
     MPU6050FLEX_GYRO_FS_SEL_250 = 0x00,
@@ -51,7 +57,9 @@ typedef enum
 	MPU6050FLEX_GYRO_FS_SEL_1000 = 0x10,
 	MPU6050FLEX_GYRO_FS_SEL_2000 = 0x18,
 } MPU6050Flex_GYRO_FS_SEL_Options_t;
-
+/**
+ * @brief Enum containing containing valid accelerometer full scall range options
+ */
 typedef enum
 {
     MPU6050FLEX_ACC_FS_SEL_2 = 0x00,
@@ -60,9 +68,14 @@ typedef enum
 	MPU6050FLEX_ACC_FS_SEL_16 = 0x18,
 } MPU6050Flex_ACC_FS_SEL_Options_t;
 
+/**
+ * @brief Several defines that define the masks for each parameter that can be set in the register that doesn't
+ * 		  occupy the full register (in that case mask 0xFF is implied)
+ */
+#define MPU6050FLEX_SMPLRT_DIV_MSK 0xFF
 #define MPU6050FLEX_DLPF_CFG_MSK 0x07
-#define MPU6050FLEX_GYRO_FS_SEL_MSK 0x18
-#define MPU6050FLEX_ACC_FS_SEL_MSK 0x18
+#define MPU6050FLEX_FS_SEL_MSK 0x18
+#define MPU6050FLEX_AFS_SEL_MSK 0x18
 
 /**
  * @brief Enum containing all mpu6050 register addresses that the Mpu6050Flex library interacts with
@@ -70,8 +83,8 @@ typedef enum
 typedef enum
 {
     REG_WHO_AM_I = 0x75,
-	REG_SAMPLE_RATE_DIVIDER = 0x19,
-	REG_CONFIGURATION = 0x1A,
+	REG_SMPRT_DIV = 0x19,
+	REG_CONFIG = 0x1A,
 	REG_GYRO_CONFIG = 0x1B,
 	REG_ACCEL_CONFIG = 0x1C,
 	REG_PWR_MGMT_1 = 0x6B,
@@ -88,9 +101,9 @@ IOFunc_t Mpu6050Flex_GetIOWrite();
 IOFunc_t Mpu6050Flex_GetIORead();
 uint8_t Mpu6050Flex_WhoAmI();
 MPU6050Flex_Status_t Mpu6050Flex_ConfigSampleRateDivider(uint8_t Division);
-MPU6050Flex_Status_t Mpu6050Flex_ConfigDigitalLowPassFilter(uint8_t ConfigOption);
-MPU6050Flex_Status_t Mpu6050Flex_ConfigGyroFullScaleRange(uint8_t ConfigOption);
-MPU6050Flex_Status_t Mpu6050Flex_ConfigAccFullScaleRange(uint8_t ConfigOption);
+MPU6050Flex_Status_t Mpu6050Flex_ConfigDigitalLowPassFilter(MPU6050Flex_DLPF_Options_t ConfigOption);
+MPU6050Flex_Status_t Mpu6050Flex_ConfigGyroFullScaleRange(MPU6050Flex_GYRO_FS_SEL_Options_t ConfigOption);
+MPU6050Flex_Status_t Mpu6050Flex_ConfigAccFullScaleRange(MPU6050Flex_ACC_FS_SEL_Options_t ConfigOption);
 MPU6050Flex_Status_t Mpu6050Flex_WakeUp();
 
 #endif /* MPU6050FLEX_H_ */
