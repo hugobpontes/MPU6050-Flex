@@ -217,8 +217,8 @@ static MPU6050Flex_Status_t Mpu6050Flex_ReplaceRegisterSegment(uint8_t RegisterA
 	{
 		if (Mpu6050Config.pIORead(RegisterAddress,1,&CurrentRegValue) == IO_SUCCESS)
 		{
-			/*Bitwise operation to Remove current parameter
-			 * value from read byte and value specified in function arguments*/
+			/*Bitwise operation to remove current parameter value
+			 * from read byte and to replace it with value specified in function arguments*/
 			WriteValue = (CurrentRegValue & (~SegmentMask)) | Value;
 			if (Mpu6050Config.pIOWrite(RegisterAddress,1,&WriteValue) != IO_SUCCESS)
 			{
@@ -497,7 +497,8 @@ MPU6050Flex_Status_t Mpu6050Flex_Calibrate()
 
 	}
 
-	/*Compute average data offsets for both gyro and accelerometer data*/
+	/*Compute average data offsets for both gyro and accelerometer data ~
+	 * and write it in static imu data offset struct*/
 	Mpu6050Flex_DivideFullImuDataStruct(&Mpu6050ImuDataOffset,&TempFullImuData,CALIBRATION_ITERATIONS_PO2);
 
 	MPU6050Flex_Status_t Status = MPU6050FLEX_SUCCESS;
