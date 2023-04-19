@@ -10,27 +10,46 @@
 #include <Mpu6050Flex.h>
 #include <stdint.h>
 #include <stdbool.h>
-
+#include <string.h>
+#include <stddef.h>
 /**
  * @brief Type representing a structure containing all configurable parameters in the Mpu6050 library.
+ *
  */
 typedef struct Mpu6050ConfigStruct
 {
-	IOFunc_t pIOWrite;
-	IOFunc_t pIORead;
-} Mpu6050Config_t;
+	IOFunc_t pIOWrite; /**< Pointer to the function used to write bytes to the mpu6050 registers */
+	IOFunc_t pIORead;  /**< Pointer to the function used to read bytes from the mpu6050 registers */
+	DelayFunc_t pDelay;/**< Pointer to the function used delay a given amount of ms */
+} Mpu6050Flex_Config_t;
 
+#define CALIBRATION_DURATION 3000 		/**< Duration of calibration period */
+#define CALIBRATION_ITERATIONS_PO2 2	/**< Number to which 2 is raised to indicate nmbr of samples to be taken within calibration sec */
+#define POW_2(n) (1 << (n))				/**< Macro to compute power of two */
+#define CALIBRATION_DELAY 3000/POW_2(CALIBRATION_ITERATIONS_PO2) /**< Calibration delay to match above settings */
 
-static Mpu6050Config_t Mpu6050Config =
-{
-	.pIORead = 0,
-	.pIOWrite = 0,
-};
-
+/*Static function declarations*/
 static MPU6050Flex_Status_t Mpu6050Flex_ReplaceRegisterSegment(uint8_t Register,uint8_t SegmentMask, uint8_t Value);
 static MPU6050Flex_Status_t Mpu6050Flex_WriteFullRegister(uint8_t Register, uint8_t Value);
 static bool Mpu6050Flex_ValueFitsInMask(uint8_t Option, uint8_t Mask);
 static MPU6050Flex_Status_t Mpu6050Flex_UpdateParameter(uint8_t ParameterValue, uint8_t ParameterMask, uint8_t RegisterAddress);
+static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuData32_t* pDest, Mpu6050Flex_ImuData_t* pAccData, Mpu6050Flex_ImuData_t* pGyroData);
+static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuData_t* pDest, Mpu6050Flex_FullImuData32_t* pOrig, uint8_t RightShift);
+static void Mpu6050Flex_SubtractImuDataStruct(Mpu6050Flex_ImuData_t* pA, Mpu6050Flex_ImuData_t* pB);
+
+/**
+ * @brief Calibration offsets struct used for the imu data readings
+ */
+static Mpu6050Flex_FullImuData_t Mpu6050ImuDataOffset = {0};
+/**
+ * @brief Mpu6050 Configuration struct
+ */
+static Mpu6050Flex_Config_t Mpu6050Config =
+{
+	.pIORead = NULL,
+	.pIOWrite = NULL,
+	.pDelay = NULL,
+};
 
 /**
  * @brief Injects the IO Write function that this library uses
@@ -51,6 +70,15 @@ void Mpu6050Flex_SetIORead(IOFunc_t pReadFunc)
 	Mpu6050Config.pIORead = pReadFunc;
 }
 /**
+ * @brief Injects the Delay in ms function that this library uses
+ *
+ * @param pDelay Function Pointer that points to the delay function to use
+ */
+void Mpu6050Flex_SetDelay(DelayFunc_t pDelay)
+{
+	Mpu6050Config.pDelay = pDelay;
+}
+/**
  * @brief Gets a pointer to the currently set IO write function pointer
  *
  * @return Pointer to the currently set IO write function pointer
@@ -69,20 +97,31 @@ IOFunc_t Mpu6050Flex_GetIORead()
 	return Mpu6050Config.pIORead;
 }
 /**
+ * @brief Gets a pointer to the currently set delay in ms function pointer
+ *
+ * @return Pointer to the currently set delay function pointer
+ */
+DelayFunc_t Mpu6050Flex_GetDelay()
+{
+	return Mpu6050Config.pDelay;
+}
+/**
  * @brief Requests the i2c address of the mpu6050 device via i2c, used to verify working i2c interface
  *
  * @return I2C Address of the MPU6050 or 0xFF if it wasnt possible to obtain a valid address
  */
 uint8_t Mpu6050Flex_WhoAmI()
 {
-	uint8_t Response;
+	uint8_t Mpu6050Address = 0xFF;
 
-	if (Mpu6050Config.pIORead(REG_WHO_AM_I,1,&Response) != IO_SUCCESS)
+	if (Mpu6050Config.pIORead)
 	{
-		Response = 0xFF;
+		if (Mpu6050Config.pIORead(REG_WHO_AM_I,1,&Mpu6050Address) != IO_SUCCESS)
+		{
+			Mpu6050Address = 0xFF;
+		}
 	}
-
-	return Response;
+	return Mpu6050Address;
 }
 /**
  * @brief Updates the SMPLRT_DIV parameter of the SMPRT_DIV register, configuring the sample rate divider
@@ -158,8 +197,8 @@ MPU6050Flex_Status_t Mpu6050Flex_ConfigAccFullScaleRange(MPU6050Flex_ACC_FS_SEL_
 	return Status;
 }
 /**
- * @brief Reads a given register and changes a segment of it based on a parameter
- * value and mask that fit within that register.
+ * @brief Reads a given register,changes a segment of it based on a parameter
+ * value and mask that fit within that register, and writes the updated value back.
  *
  * @param RegisterAddress: Register address of where the segment to be replaced is
  * @param SegmentMask: Mask to indicate which segment of the register is to be replaced
@@ -174,11 +213,19 @@ static MPU6050Flex_Status_t Mpu6050Flex_ReplaceRegisterSegment(uint8_t RegisterA
 
 	MPU6050Flex_Status_t Status = MPU6050FLEX_SUCCESS;
 
-	if (Mpu6050Config.pIORead(RegisterAddress,1,&CurrentRegValue) == IO_SUCCESS)
+	if (Mpu6050Config.pIORead && Mpu6050Config.pIOWrite)
 	{
-		//Remove current parameter value and add specified value
-		WriteValue = (CurrentRegValue & (~SegmentMask)) | Value;
-		if (Mpu6050Config.pIOWrite(RegisterAddress,1,&WriteValue) != IO_SUCCESS)
+		if (Mpu6050Config.pIORead(RegisterAddress,1,&CurrentRegValue) == IO_SUCCESS)
+		{
+			/*Bitwise operation to Remove current parameter
+			 * value from read byte and value specified in function arguments*/
+			WriteValue = (CurrentRegValue & (~SegmentMask)) | Value;
+			if (Mpu6050Config.pIOWrite(RegisterAddress,1,&WriteValue) != IO_SUCCESS)
+			{
+				Status = MPU6050FLEX_FAILURE;
+			}
+		}
+		else
 		{
 			Status = MPU6050FLEX_FAILURE;
 		}
@@ -187,7 +234,6 @@ static MPU6050Flex_Status_t Mpu6050Flex_ReplaceRegisterSegment(uint8_t RegisterA
 	{
 		Status = MPU6050FLEX_FAILURE;
 	}
-
 	return Status;
 }
 /**
@@ -202,7 +248,14 @@ static MPU6050Flex_Status_t Mpu6050Flex_WriteFullRegister(uint8_t RegisterAddres
 {
 	MPU6050Flex_Status_t Status = MPU6050FLEX_SUCCESS;
 
-	if (Mpu6050Config.pIOWrite(RegisterAddress,1,&Value) != IO_SUCCESS)
+	if (Mpu6050Config.pIOWrite)
+	{
+		if (Mpu6050Config.pIOWrite(RegisterAddress,1,&Value) != IO_SUCCESS)
+		{
+			Status = MPU6050FLEX_FAILURE;
+		}
+	}
+	else
 	{
 		Status = MPU6050FLEX_FAILURE;
 	}
@@ -258,10 +311,199 @@ static MPU6050Flex_Status_t Mpu6050Flex_UpdateParameter(uint8_t ParameterValue, 
 	}
 	return Status;
 }
+/**
+ * @brief Verifies whether a given register is valid for a burst read of imu data (accel data or gyro data).
+ * Only REG_ACCEL_XOUT_H and REG_GYRO_XOUT_H are valid for this purpose
+ *
+ * @param DataRegister: Register to be checked for validity
+ *
+ * @return Boolean value of whether or not register is valid for reading Imu Data
+ */
+static bool Mpu6050Flex_IsValidImuDataRegister(uint8_t DataRegister)
+{
+	bool ret = false;
+	if ((DataRegister == REG_ACCEL_XOUT_H) || (DataRegister == REG_GYRO_XOUT_H))
+	{
+		ret = true;
+	}
+	return ret;
+}
+/**
+ * @brief Reads 6 bytes of Imu data (gyro or accel data) from a given register and
+ * returns a imu data struct with read data
+ *
+ * @param DataRegister: Register in which data read should start
+ *
+ * @return Struct containing imu data read or empty struct if any of the function steps fails
+ */
+static Mpu6050Flex_ImuData_t Mpu6050Flex_GetImuData(uint8_t DataRegister)
+{
+	uint8_t SerializedData[6];
+	Mpu6050Flex_ImuData_t ImuData = {0};
 
+	if (Mpu6050Config.pIORead)
+	{
+		if (Mpu6050Flex_IsValidImuDataRegister(DataRegister))
+		{
+			if (Mpu6050Config.pIORead(DataRegister,6,SerializedData) == IO_SUCCESS)
+			{
+				/*Copy serialized bytes into struct */
+				memcpy(&(ImuData.DataX),SerializedData,2);
+				memcpy(&(ImuData.DataY),SerializedData+2,2);
+				memcpy(&(ImuData.DataZ),SerializedData+4,2);
+			}
+		}
+	}
+	return ImuData;
+}
+/**
+ * @brief Reads 6 bytes of accelerometer IMU data and
+ * returns a imu data struct with read data
+ *
+ * @return Struct containing raw acceleration imu data read or empty struct if any of the underlying function steps fails
+ */
+Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawAccelData()
+{
+	return Mpu6050Flex_GetImuData(REG_ACCEL_XOUT_H);
+}
+/**
+ * @brief Reads 6 bytes of accelerometer IMU data, subtracts previously computed calibration offset, and
+ * returns a imu data struct with calibrated data
+ *
+ * @return Struct containing calibrated acceleration imu data read or empty struct if any of the underlying function steps fails
+ */
+Mpu6050Flex_ImuData_t Mpu6050Flex_GetAccelData()
+{
+	Mpu6050Flex_ImuData_t RetData;
 
+	RetData = Mpu6050Flex_GetImuData(REG_ACCEL_XOUT_H);
+	Mpu6050Flex_SubtractImuDataStruct(&RetData,&Mpu6050ImuDataOffset.AccData);
 
+	return RetData;
+}
+/**
+ * @brief Reads 6 bytes of gyro IMU data and
+ * returns a imu data struct with read data
+ *
+ * @return Struct containing raw gyro imu data read or empty struct if any of the underlying function steps fails
+ */
+Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawGyroData()
+{
+	return Mpu6050Flex_GetImuData(REG_GYRO_XOUT_H);
+}
+/**
+ * @brief Reads 6 bytes of gyro IMU data, subtracts previously computed calibration offset, and
+ * returns a imu data struct with calibrated data
+ *
+ * @return Struct containing calibrated gyro imu data read or empty struct if any of the underlying function steps fails
+ */
+Mpu6050Flex_ImuData_t Mpu6050Flex_GetGyroData()
+{
+	Mpu6050Flex_ImuData_t RetData;
 
+	RetData = Mpu6050Flex_GetImuData(REG_GYRO_XOUT_H);
+	Mpu6050Flex_SubtractImuDataStruct(&RetData,&Mpu6050ImuDataOffset.GyroData);
+
+	return RetData;
+}
+/**
+ * @brief Function used to be obtain the current calibration offset values for the accelerometer and gyro readings
+ *
+ * @return Struct containing the current calibration offset values for the accelerometer and gyro readings
+ */
+Mpu6050Flex_FullImuData_t Mpu6050Flex_GetImuDataOffsets()
+{
+	return Mpu6050ImuDataOffset;
+}
+/**
+ * @brief Subtracts the fields of a given Mpu6050Flex_ImuData_t struct
+ * struct by the fields of another Mpu6050Flex_ImuData_t struct
+ *
+ * @param pA: Pointer to the target Mpu6050Flex_ImuData_t struct
+ * @param pB: Pointer to the Mpu6050Flex_ImuData_t struct that will be structed for the target
+ *
+ */
+static void Mpu6050Flex_SubtractImuDataStruct(Mpu6050Flex_ImuData_t* pA, Mpu6050Flex_ImuData_t* pB)
+{
+	pA->DataX = pA->DataX - pB->DataX;
+	pA->DataY = pA->DataY - pB->DataY;
+	pA->DataZ = pA->DataZ - pB->DataZ;
+}
+/**
+ * @brief Adds the fields of two (accel and gyro) given Mpu6050Flex_ImuData_t struct
+ * to a target Mpu6050Flex_FullImuData32_t struct containing gyro and accel data.
+ * This function is nominally used to accumulate imu data readings in a struct with 32 bit elements
+ * that can go over the 16bit limit of the default struct when calculating reading average for calibration purposes
+ *
+ * @param pDest: Pointer to the target Mpu6050Flex_FullImuData32_t struct in which data is accumulated
+ * @param pAccData: Pointer to a Mpu6050Flex_ImuData_t struct containing accel data. Nominally pointer to a just read set of accel readings
+ * @param pGyroData: Pointer to a Mpu6050Flex_ImuData_t struct containing gyro data. Nominally pointer to a just read set of accel readings
+ *
+ */
+static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuData32_t* pDest, Mpu6050Flex_ImuData_t* pAccData, Mpu6050Flex_ImuData_t* pGyroData)
+{
+	pDest->AccData.DataX 	=  pDest->AccData.DataX + pAccData->DataX;
+	pDest->AccData.DataY 	=  pDest->AccData.DataY + pAccData->DataY;
+	pDest->AccData.DataZ 	=  pDest->AccData.DataZ + pAccData->DataZ;
+	pDest->GyroData.DataX 	=  pDest->GyroData.DataX + pGyroData->DataX;
+	pDest->GyroData.DataY 	=  pDest->GyroData.DataY + pGyroData->DataY;
+	pDest->GyroData.DataZ 	=  pDest->GyroData.DataZ + pGyroData->DataZ;
+
+}
+/**
+ * @brief Divides a Full (gyro+accel) IMU struct by a given power of two, and writes the result in a target IMU Full data struct.
+ * This function is Used to average out accumulated IMU data readings
+ *
+ * @param pDest: Pointer to the target Mpu6050Flex_FullImuData_t struct in which divided/average data is written
+ * @param pOrig: Pointer to struct that will be divided
+ * @param Rightshift: Number to which 2 is raised to to indicate divisor/total samples
+ * (ex. RightShift = 2 -> Division by 2^2 = 4)
+ *
+ */
+static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuData_t* pDest, Mpu6050Flex_FullImuData32_t* pOrig, uint8_t RightShift)
+{
+	pDest->AccData.DataX =  pOrig->AccData.DataX >> RightShift;
+	pDest->AccData.DataY =  pOrig->AccData.DataY >> RightShift;
+	pDest->AccData.DataZ =  pOrig->AccData.DataZ >> RightShift;
+	pDest->GyroData.DataX =  pOrig->GyroData.DataX >> RightShift;
+	pDest->GyroData.DataY =  pOrig->GyroData.DataY >> RightShift;
+	pDest->GyroData.DataZ =  pOrig->GyroData.DataZ >> RightShift;
+}
+/**
+ * @brief Obtains a  Full (gyro+accel) calibration offset IMU data struct that will be used later to compute calibration data.
+ * To do so, a given amount of samples defined earlier (must be a power of two) is obtained in an amount of time defined earlier
+ * and accumulated in a 32 bit Full IMU data struct,and later the accumulated data is averaged out and written in a 16 bit IMU
+ * data struct, to give the average calibration data offset.
+ * The IMU must be stationary and in a resting position for the specified amount of time for the calibration to work.
+ *
+ * @return Status code to access operation success
+ */
+MPU6050Flex_Status_t Mpu6050Flex_Calibrate()
+{
+	Mpu6050Flex_FullImuData32_t TempFullImuData = {0};
+	Mpu6050Flex_ImuData_t TempAccData;
+	Mpu6050Flex_ImuData_t TempGyroData;
+
+	uint8_t idx = 0;
+	for (idx=0;idx<POW_2(CALIBRATION_ITERATIONS_PO2);idx++)
+	{
+		/*Obtain new samples*/
+		TempAccData  = Mpu6050Flex_GetRawAccelData();
+		TempGyroData = Mpu6050Flex_GetRawGyroData();
+
+		/*Accumulate data that will be averaged out later */
+		Mpu6050Flex_AccumulateFullImuDataStruct(&TempFullImuData,&TempAccData,&TempGyroData);
+		Mpu6050Config.pDelay(CALIBRATION_DELAY);
+
+	}
+
+	/*Compute average data offsets for both gyro and accelerometer data*/
+	Mpu6050Flex_DivideFullImuDataStruct(&Mpu6050ImuDataOffset,&TempFullImuData,CALIBRATION_ITERATIONS_PO2);
+
+	MPU6050Flex_Status_t Status = MPU6050FLEX_SUCCESS;
+
+	return Status;
+}
 
 //Test function: dont bother commenting, will be replaced by set power mode function
 MPU6050Flex_Status_t Mpu6050Flex_WakeUp()
