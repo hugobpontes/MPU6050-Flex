@@ -13,6 +13,15 @@
 #include <string.h>
 #include <stddef.h>
 /**
+ * @brief Type representing a structure containing the current set scale between accelerometer and
+ * gyro measurements and the physical units (g and deg/s) in which they're represented (scale = FullScaleRange/((2^16)-1))
+ */
+typedef struct Mpu6050ScaleStruct
+{
+	float AccScale;
+	float GyroScale;
+} Mpu6050Flex_Scale_t;
+/**
  * @brief Type representing a structure containing all configurable parameters in the Mpu6050 library.
  *
  */
@@ -27,6 +36,15 @@ typedef struct Mpu6050ConfigStruct
 #define CALIBRATION_ITERATIONS_PO2 2	/**< Number to which 2 is raised to indicate nmbr of samples to be taken within calibration sec */
 #define POW_2(n) (1 << (n))				/**< Macro to compute power of two */
 #define CALIBRATION_DELAY 3000/POW_2(CALIBRATION_ITERATIONS_PO2) /**< Calibration delay to match above settings */
+
+#define SCALE_MPU6050FLEX_GYRO_FS_SEL_250 	(500/((2^16)-1))
+#define SCALE_MPU6050FLEX_GYRO_FS_SEL_500 	(1000/((2^16)-1))
+#define SCALE_MPU6050FLEX_GYRO_FS_SEL_1000 	(2000/((2^16)-1))
+#define SCALE_MPU6050FLEX_GYRO_FS_SEL_2000 	(4000/((2^16)-1))
+#define SCALE_MPU6050FLEX_ACC_FS_SEL_2		(4/((2^16)-1))
+#define SCALE_MPU6050FLEX_ACC_FS_SEL_4		(8/((2^16)-1))
+#define SCALE_MPU6050FLEX_ACC_FS_SEL_8		(16/((2^16)-1))
+#define SCALE_MPU6050FLEX_ACC_FS_SEL_16		(32/((2^16)-1))
 
 /*Static function declarations*/
 static MPU6050Flex_Status_t Mpu6050Flex_ReplaceRegisterSegment(uint8_t Register,uint8_t SegmentMask, uint8_t Value);
@@ -50,7 +68,14 @@ static Mpu6050Flex_Config_t Mpu6050Config =
 	.pIOWrite = NULL,
 	.pDelay = NULL,
 };
-
+/**
+ * @brief Mpu6050 Configuration struct
+ */
+static Mpu6050Flex_Scale_t Mpu6050Scale =
+{
+	.AccScale = 	SCALE_MPU6050FLEX_ACC_FS_SEL_2,
+	.GyroScale = 	SCALE_MPU6050FLEX_GYRO_FS_SEL_250,
+};
 /**
  * @brief Injects the IO Write function that this library uses
  *
@@ -158,6 +183,7 @@ MPU6050Flex_Status_t Mpu6050Flex_ConfigDigitalLowPassFilter(MPU6050Flex_DLPF_Opt
 }
 /**
  * @brief Updates the FS_SEL parameter of the GYRO_CONFIG register, configuring the gyro full scale range
+ * Also configures the local gyro scale variable
  *
  * @param ConfigOption: Configuration option as specified in the appropriate register map section,
  * if value isn't part of the MPU6050Flex_GYRO_FS_SEL_Options_t enum, this function will return an error:
@@ -174,10 +200,30 @@ MPU6050Flex_Status_t Mpu6050Flex_ConfigGyroFullScaleRange(MPU6050Flex_GYRO_FS_SE
 
 	Status = Mpu6050Flex_UpdateParameter(ConfigOption,MPU6050FLEX_FS_SEL_MSK,REG_GYRO_CONFIG);
 
+	if (Status == MPU6050FLEX_SUCCESS)
+	{
+		switch (ConfigOption)
+		{
+		case MPU6050FLEX_GYRO_FS_SEL_250:
+			Mpu6050Scale.GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_250;
+			break;
+		case MPU6050FLEX_GYRO_FS_SEL_500:
+			Mpu6050Scale.GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_500;
+			break;
+		case MPU6050FLEX_GYRO_FS_SEL_1000:
+			Mpu6050Scale.GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_1000;
+			break;
+		case MPU6050FLEX_GYRO_FS_SEL_2000:
+			Mpu6050Scale.GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_2000;
+			break;
+		}
+	}
+
 	return Status;
 }
 /**
- * @brief Updates the AFS_SEL parameter of the ACCEL_CONFIG register, configuring the accelerometer full scale range
+ * @brief Updates the AFS_SEL parameter of the ACCEL_CONFIG register, configuring the accelerometer full scale range.
+ * Also configures the local accelerometer scale variable
  *
  * @param ConfigOption: Configuration option as specified in the appropriate register map section,
  * if value isn't part of the MPU6050Flex_ACC_FS_SEL_Options_t enum, this function will return an error:
@@ -193,6 +239,25 @@ MPU6050Flex_Status_t Mpu6050Flex_ConfigAccFullScaleRange(MPU6050Flex_ACC_FS_SEL_
 	MPU6050Flex_Status_t Status;
 
 	Status = Mpu6050Flex_UpdateParameter(ConfigOption,MPU6050FLEX_AFS_SEL_MSK,REG_ACCEL_CONFIG);
+
+	if (Status == MPU6050FLEX_SUCCESS)
+		{
+			switch (ConfigOption)
+			{
+			case MPU6050FLEX_ACC_FS_SEL_2:
+				Mpu6050Scale.AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_2;
+				break;
+			case MPU6050FLEX_ACC_FS_SEL_4:
+				Mpu6050Scale.AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_4;
+				break;
+			case MPU6050FLEX_ACC_FS_SEL_8:
+				Mpu6050Scale.AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_8;
+				break;
+			case MPU6050FLEX_ACC_FS_SEL_16:
+				Mpu6050Scale.AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_16;
+				break;
+			}
+		}
 
 	return Status;
 }
@@ -294,7 +359,7 @@ static MPU6050Flex_Status_t Mpu6050Flex_UpdateParameter(uint8_t ParameterValue, 
 		/*If mask is 0xFF there is no need
 		 * to read the current register value, so that step is bypassed
 		 * in Mpu6050Flex_WriteFullRegister. */
-		Mpu6050Flex_WriteFullRegister( RegisterAddress, ParameterValue);
+		Status = Mpu6050Flex_WriteFullRegister( RegisterAddress, ParameterValue);
 	}
 	else
 	{
@@ -457,7 +522,7 @@ static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuData32_t*
  * @param pDest: Pointer to the target Mpu6050Flex_FullImuData_t struct in which divided/average data is written
  * @param pOrig: Pointer to struct that will be divided
  * @param Rightshift: Number to which 2 is raised to to indicate divisor/total samples
- * (ex. RightShift = 2 -> Division by 2^2 = 4)
+ * (ex. RightShift = 2 -> Struct will be divided by 2^2 = 4)
  *
  */
 static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuData_t* pDest, Mpu6050Flex_FullImuData32_t* pOrig, uint8_t RightShift)
