@@ -111,15 +111,7 @@ typedef struct Mpu6050Flex_RawData
 	uint16_t RawDataZ;
 }Mpu6050Flex_ImuRawData_t;
 
-/**
- * @brief Struct containing generic float IMU data readings for 3 axes
- */
-typedef struct Mpu6050Flex_Data
-{
-	float DataX;
-	float DataY;
-	float DataZ;
-}Mpu6050Flex_ImuData_t;
+
 
 /**
  * @brief Struct containing generic 32 bit IMU data readings for 3 axes
