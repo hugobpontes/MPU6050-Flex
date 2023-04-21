@@ -52,13 +52,13 @@ static MPU6050Flex_Status_t Mpu6050Flex_WriteFullRegister(uint8_t Register, uint
 static bool Mpu6050Flex_ValueFitsInMask(uint8_t Option, uint8_t Mask);
 static MPU6050Flex_Status_t Mpu6050Flex_UpdateParameter(uint8_t ParameterValue, uint8_t ParameterMask, uint8_t RegisterAddress);
 static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuData32_t* pDest, Mpu6050Flex_ImuRawData_t* pAccData, Mpu6050Flex_ImuRawData_t* pGyroData);
-static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuData_t* pDest, Mpu6050Flex_FullImuData32_t* pOrig, uint8_t RightShift);
+static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuRawData_t* pDest, Mpu6050Flex_FullImuData32_t* pOrig, uint8_t RightShift);
 static void Mpu6050Flex_SubtractImuDataStruct(Mpu6050Flex_ImuRawData_t* pA, Mpu6050Flex_ImuRawData_t* pB);
 
 /**
  * @brief Calibration offsets struct used for the imu data readings
  */
-static Mpu6050Flex_FullImuData_t Mpu6050ImuDataOffset = {0};
+static Mpu6050Flex_FullImuRawData_t Mpu6050ImuDataOffset = {0};
 /**
  * @brief Mpu6050 Configuration struct
  */
@@ -476,7 +476,7 @@ Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetGyroData()
  *
  * @return Struct containing the current calibration offset values for the accelerometer and gyro readings
  */
-Mpu6050Flex_FullImuData_t Mpu6050Flex_GetImuDataOffsets()
+Mpu6050Flex_FullImuRawData_t Mpu6050Flex_GetImuDataOffsets()
 {
 	return Mpu6050ImuDataOffset;
 }
@@ -519,13 +519,13 @@ static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuData32_t*
  * @brief Divides a Full (gyro+accel) IMU struct by a given power of two, and writes the result in a target IMU Full data struct.
  * This function is Used to average out accumulated IMU data readings
  *
- * @param pDest: Pointer to the target Mpu6050Flex_FullImuData_t struct in which divided/average data is written
+ * @param pDest: Pointer to the target Mpu6050Flex_FullImuRawData_t struct in which divided/average data is written
  * @param pOrig: Pointer to struct that will be divided
  * @param Rightshift: Number to which 2 is raised to to indicate divisor/total samples
  * (ex. RightShift = 2 -> Struct will be divided by 2^2 = 4)
  *
  */
-static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuData_t* pDest, Mpu6050Flex_FullImuData32_t* pOrig, uint8_t RightShift)
+static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuRawData_t* pDest, Mpu6050Flex_FullImuData32_t* pOrig, uint8_t RightShift)
 {
 	pDest->AccData.RawDataX =  pOrig->AccData.RawDataX >> RightShift;
 	pDest->AccData.RawDataY =  pOrig->AccData.RawDataY >> RightShift;

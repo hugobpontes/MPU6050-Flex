@@ -134,11 +134,11 @@ typedef struct Mpu6050Flex_Data32
 /**
  * @brief Struct containing all IMU data readings provided by MPU6050 (gyro+accel) for 3 axes in 16 bit format
  */
-typedef struct Mpu6050Flex_FullImuData
+typedef struct Mpu6050Flex_FullImuRawData
 {
 	Mpu6050Flex_ImuRawData_t GyroData;
 	Mpu6050Flex_ImuRawData_t AccData;
-}Mpu6050Flex_FullImuData_t;
+}Mpu6050Flex_FullImuRawData_t;
 /**
  * @brief Struct containing all IMU data readings provided by MPU6050 (gyro+accel) for 3 axes in 32 bit format
  * 32 bit structs are necessary so several 16 bit structs can be added together without overflowing when computing averages
@@ -164,7 +164,7 @@ MPU6050Flex_Status_t Mpu6050Flex_ConfigAccFullScaleRange(MPU6050Flex_ACC_FS_SEL_
 MPU6050Flex_Status_t Mpu6050Flex_WakeUp();
 Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetRawAccelData();
 Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetRawGyroData();
-Mpu6050Flex_FullImuData_t Mpu6050Flex_GetImuDataOffsets();
+Mpu6050Flex_FullImuRawData_t Mpu6050Flex_GetImuDataOffsets();
 MPU6050Flex_Status_t Mpu6050Flex_Calibrate();
 Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetAccelData();
 Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetGyroData();
