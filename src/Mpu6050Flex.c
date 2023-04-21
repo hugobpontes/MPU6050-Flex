@@ -51,9 +51,9 @@ static MPU6050Flex_Status_t Mpu6050Flex_ReplaceRegisterSegment(uint8_t Register,
 static MPU6050Flex_Status_t Mpu6050Flex_WriteFullRegister(uint8_t Register, uint8_t Value);
 static bool Mpu6050Flex_ValueFitsInMask(uint8_t Option, uint8_t Mask);
 static MPU6050Flex_Status_t Mpu6050Flex_UpdateParameter(uint8_t ParameterValue, uint8_t ParameterMask, uint8_t RegisterAddress);
-static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuData32_t* pDest, Mpu6050Flex_ImuData_t* pAccData, Mpu6050Flex_ImuData_t* pGyroData);
+static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuData32_t* pDest, Mpu6050Flex_ImuRawData_t* pAccData, Mpu6050Flex_ImuRawData_t* pGyroData);
 static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuData_t* pDest, Mpu6050Flex_FullImuData32_t* pOrig, uint8_t RightShift);
-static void Mpu6050Flex_SubtractImuDataStruct(Mpu6050Flex_ImuData_t* pA, Mpu6050Flex_ImuData_t* pB);
+static void Mpu6050Flex_SubtractImuDataStruct(Mpu6050Flex_ImuRawData_t* pA, Mpu6050Flex_ImuRawData_t* pB);
 
 /**
  * @brief Calibration offsets struct used for the imu data readings
@@ -401,10 +401,10 @@ static bool Mpu6050Flex_IsValidImuDataRegister(uint8_t DataRegister)
  *
  * @return Struct containing imu data read or empty struct if any of the function steps fails
  */
-static Mpu6050Flex_ImuData_t Mpu6050Flex_GetImuData(uint8_t DataRegister)
+static Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetImuData(uint8_t DataRegister)
 {
 	uint8_t SerializedData[6];
-	Mpu6050Flex_ImuData_t ImuData = {0};
+	Mpu6050Flex_ImuRawData_t ImuData = {0};
 
 	if (Mpu6050Config.pIORead)
 	{
@@ -413,9 +413,9 @@ static Mpu6050Flex_ImuData_t Mpu6050Flex_GetImuData(uint8_t DataRegister)
 			if (Mpu6050Config.pIORead(DataRegister,6,SerializedData) == IO_SUCCESS)
 			{
 				/*Copy serialized bytes into struct */
-				memcpy(&(ImuData.DataX),SerializedData,2);
-				memcpy(&(ImuData.DataY),SerializedData+2,2);
-				memcpy(&(ImuData.DataZ),SerializedData+4,2);
+				memcpy(&(ImuData.RawDataX),SerializedData,2);
+				memcpy(&(ImuData.RawDataY),SerializedData+2,2);
+				memcpy(&(ImuData.RawDataZ),SerializedData+4,2);
 			}
 		}
 	}
@@ -427,7 +427,7 @@ static Mpu6050Flex_ImuData_t Mpu6050Flex_GetImuData(uint8_t DataRegister)
  *
  * @return Struct containing raw acceleration imu data read or empty struct if any of the underlying function steps fails
  */
-Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawAccelData()
+Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetRawAccelData()
 {
 	return Mpu6050Flex_GetImuData(REG_ACCEL_XOUT_H);
 }
@@ -437,9 +437,9 @@ Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawAccelData()
  *
  * @return Struct containing calibrated acceleration imu data read or empty struct if any of the underlying function steps fails
  */
-Mpu6050Flex_ImuData_t Mpu6050Flex_GetAccelData()
+Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetAccelData()
 {
-	Mpu6050Flex_ImuData_t RetData;
+	Mpu6050Flex_ImuRawData_t RetData;
 
 	RetData = Mpu6050Flex_GetImuData(REG_ACCEL_XOUT_H);
 	Mpu6050Flex_SubtractImuDataStruct(&RetData,&Mpu6050ImuDataOffset.AccData);
@@ -452,7 +452,7 @@ Mpu6050Flex_ImuData_t Mpu6050Flex_GetAccelData()
  *
  * @return Struct containing raw gyro imu data read or empty struct if any of the underlying function steps fails
  */
-Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawGyroData()
+Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetRawGyroData()
 {
 	return Mpu6050Flex_GetImuData(REG_GYRO_XOUT_H);
 }
@@ -462,9 +462,9 @@ Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawGyroData()
  *
  * @return Struct containing calibrated gyro imu data read or empty struct if any of the underlying function steps fails
  */
-Mpu6050Flex_ImuData_t Mpu6050Flex_GetGyroData()
+Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetGyroData()
 {
-	Mpu6050Flex_ImuData_t RetData;
+	Mpu6050Flex_ImuRawData_t RetData;
 
 	RetData = Mpu6050Flex_GetImuData(REG_GYRO_XOUT_H);
 	Mpu6050Flex_SubtractImuDataStruct(&RetData,&Mpu6050ImuDataOffset.GyroData);
@@ -481,38 +481,38 @@ Mpu6050Flex_FullImuData_t Mpu6050Flex_GetImuDataOffsets()
 	return Mpu6050ImuDataOffset;
 }
 /**
- * @brief Subtracts the fields of a given Mpu6050Flex_ImuData_t struct
- * struct by the fields of another Mpu6050Flex_ImuData_t struct
+ * @brief Subtracts the fields of a given Mpu6050Flex_ImuRawData_t struct
+ * struct by the fields of another Mpu6050Flex_ImuRawData_t struct
  *
- * @param pA: Pointer to the target Mpu6050Flex_ImuData_t struct
- * @param pB: Pointer to the Mpu6050Flex_ImuData_t struct that will be structed for the target
+ * @param pA: Pointer to the target Mpu6050Flex_ImuRawData_t struct
+ * @param pB: Pointer to the Mpu6050Flex_ImuRawData_t struct that will be structed for the target
  *
  */
-static void Mpu6050Flex_SubtractImuDataStruct(Mpu6050Flex_ImuData_t* pA, Mpu6050Flex_ImuData_t* pB)
+static void Mpu6050Flex_SubtractImuDataStruct(Mpu6050Flex_ImuRawData_t* pA, Mpu6050Flex_ImuRawData_t* pB)
 {
-	pA->DataX = pA->DataX - pB->DataX;
-	pA->DataY = pA->DataY - pB->DataY;
-	pA->DataZ = pA->DataZ - pB->DataZ;
+	pA->RawDataX = pA->RawDataX - pB->RawDataX;
+	pA->RawDataY = pA->RawDataY - pB->RawDataY;
+	pA->RawDataZ = pA->RawDataZ - pB->RawDataZ;
 }
 /**
- * @brief Adds the fields of two (accel and gyro) given Mpu6050Flex_ImuData_t struct
+ * @brief Adds the fields of two (accel and gyro) given Mpu6050Flex_ImuRawData_t struct
  * to a target Mpu6050Flex_FullImuData32_t struct containing gyro and accel data.
  * This function is nominally used to accumulate imu data readings in a struct with 32 bit elements
  * that can go over the 16bit limit of the default struct when calculating reading average for calibration purposes
  *
  * @param pDest: Pointer to the target Mpu6050Flex_FullImuData32_t struct in which data is accumulated
- * @param pAccData: Pointer to a Mpu6050Flex_ImuData_t struct containing accel data. Nominally pointer to a just read set of accel readings
- * @param pGyroData: Pointer to a Mpu6050Flex_ImuData_t struct containing gyro data. Nominally pointer to a just read set of accel readings
+ * @param pAccData: Pointer to a Mpu6050Flex_ImuRawData_t struct containing accel data. Nominally pointer to a just read set of accel readings
+ * @param pGyroData: Pointer to a Mpu6050Flex_ImuRawData_t struct containing gyro data. Nominally pointer to a just read set of accel readings
  *
  */
-static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuData32_t* pDest, Mpu6050Flex_ImuData_t* pAccData, Mpu6050Flex_ImuData_t* pGyroData)
+static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuData32_t* pDest, Mpu6050Flex_ImuRawData_t* pAccData, Mpu6050Flex_ImuRawData_t* pGyroData)
 {
-	pDest->AccData.DataX 	=  pDest->AccData.DataX + pAccData->DataX;
-	pDest->AccData.DataY 	=  pDest->AccData.DataY + pAccData->DataY;
-	pDest->AccData.DataZ 	=  pDest->AccData.DataZ + pAccData->DataZ;
-	pDest->GyroData.DataX 	=  pDest->GyroData.DataX + pGyroData->DataX;
-	pDest->GyroData.DataY 	=  pDest->GyroData.DataY + pGyroData->DataY;
-	pDest->GyroData.DataZ 	=  pDest->GyroData.DataZ + pGyroData->DataZ;
+	pDest->AccData.RawDataX 	=  pDest->AccData.RawDataX + pAccData->RawDataX;
+	pDest->AccData.RawDataY 	=  pDest->AccData.RawDataY + pAccData->RawDataY;
+	pDest->AccData.RawDataZ 	=  pDest->AccData.RawDataZ + pAccData->RawDataZ;
+	pDest->GyroData.RawDataX 	=  pDest->GyroData.RawDataX + pGyroData->RawDataX;
+	pDest->GyroData.RawDataY 	=  pDest->GyroData.RawDataY + pGyroData->RawDataY;
+	pDest->GyroData.RawDataZ 	=  pDest->GyroData.RawDataZ + pGyroData->RawDataZ;
 
 }
 /**
@@ -527,12 +527,12 @@ static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuData32_t*
  */
 static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuData_t* pDest, Mpu6050Flex_FullImuData32_t* pOrig, uint8_t RightShift)
 {
-	pDest->AccData.DataX =  pOrig->AccData.DataX >> RightShift;
-	pDest->AccData.DataY =  pOrig->AccData.DataY >> RightShift;
-	pDest->AccData.DataZ =  pOrig->AccData.DataZ >> RightShift;
-	pDest->GyroData.DataX =  pOrig->GyroData.DataX >> RightShift;
-	pDest->GyroData.DataY =  pOrig->GyroData.DataY >> RightShift;
-	pDest->GyroData.DataZ =  pOrig->GyroData.DataZ >> RightShift;
+	pDest->AccData.RawDataX =  pOrig->AccData.RawDataX >> RightShift;
+	pDest->AccData.RawDataY =  pOrig->AccData.RawDataY >> RightShift;
+	pDest->AccData.RawDataZ =  pOrig->AccData.RawDataZ >> RightShift;
+	pDest->GyroData.RawDataX =  pOrig->GyroData.RawDataX >> RightShift;
+	pDest->GyroData.RawDataY =  pOrig->GyroData.RawDataY >> RightShift;
+	pDest->GyroData.RawDataZ =  pOrig->GyroData.RawDataZ >> RightShift;
 }
 /**
  * @brief Obtains a  Full (gyro+accel) calibration offset IMU data struct that will be used later to compute calibration data.
@@ -546,8 +546,8 @@ static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuData_t* pDest
 MPU6050Flex_Status_t Mpu6050Flex_Calibrate()
 {
 	Mpu6050Flex_FullImuData32_t TempFullImuData = {0};
-	Mpu6050Flex_ImuData_t TempAccData;
-	Mpu6050Flex_ImuData_t TempGyroData;
+	Mpu6050Flex_ImuRawData_t TempAccData;
+	Mpu6050Flex_ImuRawData_t TempGyroData;
 
 	uint8_t idx = 0;
 	for (idx=0;idx<POW_2(CALIBRATION_ITERATIONS_PO2);idx++)
