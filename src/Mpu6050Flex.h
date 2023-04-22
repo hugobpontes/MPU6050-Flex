@@ -121,7 +121,6 @@ typedef struct Mpu6050Flex_FloatData
 	float FloatDataZ;
 }Mpu6050Flex_ImuFloatData_t;
 
-
 /**
  * @brief Struct containing generic 32 bit IMU data readings for 3 axes
  * 32 bit structs are necessary so several 16 bit structs can be added together without overflowing when computing averages
@@ -151,6 +150,13 @@ typedef struct Mpu6050Flex_FullImuRawData32
 }Mpu6050Flex_FullImuRawData32_t;
 
 
+typedef struct Mpu6050Flex_EulerAngles
+{
+	float Roll;
+	float Pitch;
+	float Yaw;
+}Mpu6050Flex_EulerAngles_t;
+
 void Mpu6050Flex_SetIOWrite(IOFunc_t pWriteFunc);
 void Mpu6050Flex_SetIORead(IOFunc_t pReadFunc);
 void Mpu6050Flex_SetDelay(DelayFunc_t pDelay);
@@ -169,6 +175,11 @@ Mpu6050Flex_FullImuRawData_t Mpu6050Flex_GetImuDataOffsets();
 MPU6050Flex_Status_t Mpu6050Flex_Calibrate();
 Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetAccelData();
 Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetGyroData();
+int16_t Mpu6050Flex_GetGyroScale();
+int16_t Mpu6050Flex_GetAccScale();
+MPU6050Flex_Status_t Mpu6050Flex_SetComplementaryFilterCoeffs(float GyroCoeff, float AccCoeff);
+float Mpu6050Flex_GetGyroCFCoeff();
+float Mpu6050Flex_GetAccCFCoeff();
 
 #endif /* MPU6050FLEX_H_ */
 

@@ -23,6 +23,8 @@ typedef struct Mpu6050ConfigStruct
 	DelayFunc_t pDelay;/**< Pointer to the function used delay a given amount of ms */
 	int16_t AccScale;
 	int16_t GyroScale;
+	float AccCFCoefficient; /**< Complimentary filter coefficient corresponding to the accelerometer readings */
+	float GyroCFCoefficient; /**< Complimentary filter coefficient corresponding to the gyro readings */
 } Mpu6050Flex_Config_t;
 
 #define CALIBRATION_DURATION 3000 		/**< Duration of calibration period */
@@ -117,6 +119,44 @@ DelayFunc_t Mpu6050Flex_GetDelay()
 {
 	return Mpu6050Config.pDelay;
 }
+
+int16_t Mpu6050Flex_GetAccScale()
+{
+	return Mpu6050Config.AccScale;
+}
+
+int16_t Mpu6050Flex_GetGyroScale()
+{
+	return Mpu6050Config.GyroScale;
+}
+
+MPU6050Flex_Status_t Mpu6050Flex_SetComplementaryFilterCoeffs(float GyroCoeff, float AccCoeff)
+{
+	MPU6050Flex_Status_t Status = MPU6050FLEX_SUCCESS;
+	float sum = GyroCoeff + AccCoeff;
+	if (sum == 1.0)
+	{
+		Mpu6050Config.AccCFCoefficient = AccCoeff;
+		Mpu6050Config.GyroCFCoefficient = GyroCoeff;
+	}
+	else
+	{
+		Status = MPU6050FLEX_FAILURE;
+	}
+
+	return Status;
+}
+
+float Mpu6050Flex_GetGyroCFCoeff()
+{
+	return Mpu6050Config.GyroCFCoefficient;
+}
+
+float Mpu6050Flex_GetAccCFCoeff()
+{
+	return Mpu6050Config.AccCFCoefficient;
+}
+
 /**
  * @brief Requests the i2c address of the mpu6050 device via i2c, used to verify working i2c interface
  *
