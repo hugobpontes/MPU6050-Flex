@@ -441,7 +441,7 @@ Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetAccelData()
 {
 	Mpu6050Flex_ImuRawData_t RetData;
 
-	RetData = Mpu6050Flex_GetImuData(REG_ACCEL_XOUT_H);
+	RetData = Mpu6050Flex_GetRawAccelData();
 	Mpu6050Flex_SubtractImuDataStruct(&RetData,&Mpu6050ImuDataOffset.AccData);
 
 	return RetData;
@@ -466,7 +466,7 @@ Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetGyroData()
 {
 	Mpu6050Flex_ImuRawData_t RetData;
 
-	RetData = Mpu6050Flex_GetImuData(REG_GYRO_XOUT_H);
+	RetData = Mpu6050Flex_GetRawGyroData();
 	Mpu6050Flex_SubtractImuDataStruct(&RetData,&Mpu6050ImuDataOffset.GyroData);
 
 	return RetData;

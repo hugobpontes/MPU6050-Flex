@@ -106,9 +106,9 @@ typedef void (*DelayFunc_t)(uint32_t);
  */
 typedef struct Mpu6050Flex_RawData
 {
-	uint16_t RawDataX;
-	uint16_t RawDataY;
-	uint16_t RawDataZ;
+	int16_t RawDataX;
+	int16_t RawDataY;
+	int16_t RawDataZ;
 }Mpu6050Flex_ImuRawData_t;
 
 
