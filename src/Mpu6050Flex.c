@@ -21,6 +21,7 @@ typedef struct Mpu6050ConfigStruct
 	IOFunc_t pIOWrite; /**< Pointer to the function used to write bytes to the mpu6050 registers */
 	IOFunc_t pIORead;  /**< Pointer to the function used to read bytes from the mpu6050 registers */
 	DelayFunc_t pDelay;/**< Pointer to the function used delay a given amount of ms */
+	GetMsFunc_t pGetMs;/**< Pointer used to obtain ms since start of program */
 	int16_t AccScale;
 	int16_t GyroScale;
 	float AccCFCoefficient; /**< Complimentary filter coefficient corresponding to the accelerometer readings */
@@ -54,6 +55,7 @@ static void Mpu6050Flex_SubtractImuDataStruct(Mpu6050Flex_ImuRawData_t* pA, Mpu6
  * @brief Calibration offsets struct used for the imu data readings
  */
 static Mpu6050Flex_FullImuRawData_t Mpu6050ImuDataOffset = {0};
+static uint32_t LastGyroReadTime = 0;
 /**
  * @brief Mpu6050 Configuration struct
  */
@@ -65,6 +67,12 @@ static Mpu6050Flex_Config_t Mpu6050Config =
 	.AccScale = 	SCALE_MPU6050FLEX_ACC_FS_SEL_2,
 	.GyroScale = 	SCALE_MPU6050FLEX_GYRO_FS_SEL_250,
 };
+
+uint32_t Mpu6050Flex_GetLastGyroReadTime()
+{
+	return LastGyroReadTime;
+}
+
 /**
  * @brief Injects the IO Write function that this library uses
  *
@@ -92,6 +100,12 @@ void Mpu6050Flex_SetDelay(DelayFunc_t pDelay)
 {
 	Mpu6050Config.pDelay = pDelay;
 }
+
+void Mpu6050Flex_SetGetMs(GetMsFunc_t pGetMs)
+{
+	Mpu6050Config.pGetMs = pGetMs;
+}
+
 /**
  * @brief Gets a pointer to the currently set IO write function pointer
  *
@@ -610,24 +624,46 @@ MPU6050Flex_Status_t Mpu6050Flex_Calibrate()
 	Mpu6050Flex_ImuRawData_t TempAccData;
 	Mpu6050Flex_ImuRawData_t TempGyroData;
 
+	MPU6050Flex_Status_t Status = MPU6050FLEX_SUCCESS;
+
 	uint8_t idx = 0;
 	for (idx=0;idx<POW_2(CALIBRATION_ITERATIONS_PO2);idx++)
 	{
 		/*Obtain new samples*/
 		TempAccData  = Mpu6050Flex_GetRawAccelData();
 		TempGyroData = Mpu6050Flex_GetRawGyroData();
+		if (idx == POW_2(CALIBRATION_ITERATIONS_PO2) -1)
+		{
+			/*If on the last calibration read, set time of last gyro read that
+			is used in attitude computation functions*/
+			if (Mpu6050Config.pGetMs)
+			{
+				LastGyroReadTime = Mpu6050Config.pGetMs();
+			}
+			else
+			{
+				Status = MPU6050FLEX_FAILURE;
+				break;
+			}
+		}
+
 
 		/*Accumulate data that will be averaged out later */
 		Mpu6050Flex_AccumulateFullImuDataStruct(&TempFullImuData,&TempAccData,&TempGyroData);
-		Mpu6050Config.pDelay(CALIBRATION_DELAY);
+		if (Mpu6050Config.pDelay)
+		{
+			Mpu6050Config.pDelay(CALIBRATION_DELAY);
+		}
+		else
+		{
+			Status = MPU6050FLEX_FAILURE;
+			break;
+		}
 
 	}
-
 	/*Compute average data offsets for both gyro and accelerometer data ~
 	 * and write it in static imu data offset struct*/
 	Mpu6050Flex_DivideFullImuDataStruct(&Mpu6050ImuDataOffset,&TempFullImuData,CALIBRATION_ITERATIONS_PO2);
-
-	MPU6050Flex_Status_t Status = MPU6050FLEX_SUCCESS;
 
 	return Status;
 }

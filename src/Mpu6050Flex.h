@@ -110,6 +110,8 @@ typedef IOStatus_t (*IOFunc_t)(uint8_t,uint32_t,uint8_t*);
  */
 typedef void (*DelayFunc_t)(uint32_t);
 
+typedef uint32_t(*GetMsFunc_t)();
+
 /**
  * @brief Struct containing generic 16 bit IMU data readings for 3 axes
  */
@@ -169,6 +171,7 @@ typedef struct Mpu6050Flex_EulerAngles
 void Mpu6050Flex_SetIOWrite(IOFunc_t pWriteFunc);
 void Mpu6050Flex_SetIORead(IOFunc_t pReadFunc);
 void Mpu6050Flex_SetDelay(DelayFunc_t pDelay);
+void Mpu6050Flex_SetGetMs(GetMsFunc_t pGetMs);
 IOFunc_t Mpu6050Flex_GetIOWrite();
 IOFunc_t Mpu6050Flex_GetIORead();
 DelayFunc_t Mpu6050Flex_GetDelay();
@@ -190,6 +193,7 @@ float Mpu6050Flex_GetGyroCFCoeff();
 float Mpu6050Flex_GetAccCFCoeff();
 MPU6050Flex_Status_t Mpu6050Flex_Sleep();
 MPU6050Flex_Status_t Mpu6050Flex_WakeUp();
+uint32_t Mpu6050Flex_GetLastGyroReadTime();
 
 #endif /* MPU6050FLEX_H_ */
 
