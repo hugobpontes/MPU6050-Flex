@@ -14,7 +14,7 @@
 #include <stddef.h>
 /**
  * @brief Type representing a structure containing the current set scale between accelerometer and
- * gyro measurements and the physical units (g and deg/s) in which they're represented (scale = FullScaleRange/((2^16)-1))
+ * gyro measurements and the physical units (g and deg/s) in which they're represented (scale = FullScaleRange/((1<<16)-1))
  */
 typedef struct Mpu6050ScaleStruct
 {
@@ -35,16 +35,16 @@ typedef struct Mpu6050ConfigStruct
 #define CALIBRATION_DURATION 3000 		/**< Duration of calibration period */
 #define CALIBRATION_ITERATIONS_PO2 2	/**< Number to which 2 is raised to indicate nmbr of samples to be taken within calibration sec */
 #define POW_2(n) (1 << (n))				/**< Macro to compute power of two */
-#define CALIBRATION_DELAY 3000/POW_2(CALIBRATION_ITERATIONS_PO2) /**< Calibration delay to match above settings */
+#define CALIBRATION_DELAY ((CALIBRATION_DURATION)/(POW_2(CALIBRATION_ITERATIONS_PO2))) /**< Calibration delay to match above settings */
 
-#define SCALE_MPU6050FLEX_GYRO_FS_SEL_250 	(500/((2^16)-1))
-#define SCALE_MPU6050FLEX_GYRO_FS_SEL_500 	(1000/((2^16)-1))
-#define SCALE_MPU6050FLEX_GYRO_FS_SEL_1000 	(2000/((2^16)-1))
-#define SCALE_MPU6050FLEX_GYRO_FS_SEL_2000 	(4000/((2^16)-1))
-#define SCALE_MPU6050FLEX_ACC_FS_SEL_2		(4/((2^16)-1))
-#define SCALE_MPU6050FLEX_ACC_FS_SEL_4		(8/((2^16)-1))
-#define SCALE_MPU6050FLEX_ACC_FS_SEL_8		(16/((2^16)-1))
-#define SCALE_MPU6050FLEX_ACC_FS_SEL_16		(32/((2^16)-1))
+#define SCALE_MPU6050FLEX_GYRO_FS_SEL_250 	(500/((1<<16)-1))
+#define SCALE_MPU6050FLEX_GYRO_FS_SEL_500 	(1000/((1<<16)-1))
+#define SCALE_MPU6050FLEX_GYRO_FS_SEL_1000 	(2000/((1<<16)-1))
+#define SCALE_MPU6050FLEX_GYRO_FS_SEL_2000 	(4000/((1<<16)-1))
+#define SCALE_MPU6050FLEX_ACC_FS_SEL_2		(4/((1<<16)-1))
+#define SCALE_MPU6050FLEX_ACC_FS_SEL_4		(8/((1<<16)-1))
+#define SCALE_MPU6050FLEX_ACC_FS_SEL_8		(16/((1<<16)-1))
+#define SCALE_MPU6050FLEX_ACC_FS_SEL_16		(32/((1<<16)-1))
 
 /*Static function declarations*/
 static MPU6050Flex_Status_t Mpu6050Flex_ReplaceRegisterSegment(uint8_t Register,uint8_t SegmentMask, uint8_t Value);
@@ -509,7 +509,11 @@ static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuData32_t*
 {
 	pDest->AccData.RawDataX 	=  pDest->AccData.RawDataX + pAccData->RawDataX;
 	pDest->AccData.RawDataY 	=  pDest->AccData.RawDataY + pAccData->RawDataY;
-	pDest->AccData.RawDataZ 	=  pDest->AccData.RawDataZ + pAccData->RawDataZ;
+	pDest->AccData.RawDataZ 	=  pDest->AccData.RawDataZ + pAccData->RawDataZ - 0x4000;
+	/*0x4000 is addded since that corresponds to 1g with +-2g full scale range
+	 * and if the device is stationary it is expected that RawDataZ outputs 0x4000 and not 0x0000.
+	 * As a result, 0x4000 should be removed from the computed offset so it outputs around 0x4000 when stationary
+	 */
 	pDest->GyroData.RawDataX 	=  pDest->GyroData.RawDataX + pGyroData->RawDataX;
 	pDest->GyroData.RawDataY 	=  pDest->GyroData.RawDataY + pGyroData->RawDataY;
 	pDest->GyroData.RawDataZ 	=  pDest->GyroData.RawDataZ + pGyroData->RawDataZ;
