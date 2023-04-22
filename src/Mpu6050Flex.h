@@ -47,6 +47,14 @@ typedef enum
 	MPU6050FLEX_DLPF_CFG6 = 0x06,
 	MPU6050FLEX_DLPF_CFG7 = 0x07,
 } MPU6050Flex_DLPF_Options_t;
+
+typedef enum
+{
+	/*Refer to mpu6050 register map to see what these options are about*/
+	MPU6050FLEX_SLEEP_WAKE = 0x00,
+    MPU6050FLEX_SLEEP_SLEEP = 0x40,
+} MPU6050Flex_SLEEP_Options_t;
+
 /**
  * @brief Enum containing containing valid gyro full scall range options
  */
@@ -74,6 +82,7 @@ typedef enum
  */
 #define MPU6050FLEX_SMPLRT_DIV_MSK 0xFF
 #define MPU6050FLEX_DLPF_CFG_MSK 0x07
+#define MPU6050FLEX_SLEEP_MSK 0x40
 #define MPU6050FLEX_FS_SEL_MSK 0x18
 #define MPU6050FLEX_AFS_SEL_MSK 0x18
 
@@ -168,7 +177,6 @@ MPU6050Flex_Status_t Mpu6050Flex_ConfigSampleRateDivider(uint8_t Division);
 MPU6050Flex_Status_t Mpu6050Flex_ConfigDigitalLowPassFilter(MPU6050Flex_DLPF_Options_t ConfigOption);
 MPU6050Flex_Status_t Mpu6050Flex_ConfigGyroFullScaleRange(MPU6050Flex_GYRO_FS_SEL_Options_t ConfigOption);
 MPU6050Flex_Status_t Mpu6050Flex_ConfigAccFullScaleRange(MPU6050Flex_ACC_FS_SEL_Options_t ConfigOption);
-MPU6050Flex_Status_t Mpu6050Flex_WakeUp();
 Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetRawAccelData();
 Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetRawGyroData();
 Mpu6050Flex_FullImuRawData_t Mpu6050Flex_GetImuDataOffsets();
@@ -180,6 +188,8 @@ int16_t Mpu6050Flex_GetAccScale();
 MPU6050Flex_Status_t Mpu6050Flex_SetComplementaryFilterCoeffs(float GyroCoeff, float AccCoeff);
 float Mpu6050Flex_GetGyroCFCoeff();
 float Mpu6050Flex_GetAccCFCoeff();
+MPU6050Flex_Status_t Mpu6050Flex_Sleep();
+MPU6050Flex_Status_t Mpu6050Flex_WakeUp();
 
 #endif /* MPU6050FLEX_H_ */
 

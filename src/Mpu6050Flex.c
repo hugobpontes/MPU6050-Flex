@@ -632,15 +632,18 @@ MPU6050Flex_Status_t Mpu6050Flex_Calibrate()
 	return Status;
 }
 
-//Test function: dont bother commenting, will be replaced by set power mode function
+MPU6050Flex_Status_t Mpu6050Flex_Sleep()
+{
+	MPU6050Flex_Status_t Status;
+	Status = Mpu6050Flex_UpdateParameter(MPU6050FLEX_SLEEP_SLEEP,MPU6050FLEX_SLEEP_MSK,REG_PWR_MGMT_1);
+
+	return Status;
+}
+
 MPU6050Flex_Status_t Mpu6050Flex_WakeUp()
 {
-	uint8_t Zero = 0;
-	MPU6050Flex_Status_t Status = MPU6050FLEX_SUCCESS;
+	MPU6050Flex_Status_t Status;
+	Status = Mpu6050Flex_UpdateParameter(MPU6050FLEX_SLEEP_WAKE,MPU6050FLEX_SLEEP_MSK,REG_PWR_MGMT_1);
 
-	if (Mpu6050Config.pIOWrite(REG_SMPRT_DIV,1,&Zero) != IO_SUCCESS)
-	{
-		Status = MPU6050FLEX_FAILURE;
-	}
 	return Status;
 }
