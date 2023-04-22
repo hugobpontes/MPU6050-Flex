@@ -111,18 +111,27 @@ typedef struct Mpu6050Flex_RawData
 	int16_t RawDataZ;
 }Mpu6050Flex_ImuRawData_t;
 
+/**
+ * @brief Struct containing generic 16 bit IMU data readings for 3 axes
+ */
+typedef struct Mpu6050Flex_FloatData
+{
+	float FloatDataX;
+	float FloatDataY;
+	float FloatDataZ;
+}Mpu6050Flex_ImuFloatData_t;
 
 
 /**
  * @brief Struct containing generic 32 bit IMU data readings for 3 axes
  * 32 bit structs are necessary so several 16 bit structs can be added together without overflowing when computing averages
  */
-typedef struct Mpu6050Flex_Data32
+typedef struct Mpu6050Flex_RawData32
 {
 	uint32_t RawDataX;
 	uint32_t RawDataY;
 	uint32_t RawDataZ;
-}Mpu6050Flex_Data32_t;
+}Mpu6050Flex_RawData32_t;
 /**
  * @brief Struct containing all IMU data readings provided by MPU6050 (gyro+accel) for 3 axes in 16 bit format
  */
@@ -135,11 +144,11 @@ typedef struct Mpu6050Flex_FullImuRawData
  * @brief Struct containing all IMU data readings provided by MPU6050 (gyro+accel) for 3 axes in 32 bit format
  * 32 bit structs are necessary so several 16 bit structs can be added together without overflowing when computing averages
  */
-typedef struct Mpu6050Flex_FullImuData32
+typedef struct Mpu6050Flex_FullImuRawData32
 {
-	Mpu6050Flex_Data32_t GyroData;
-	Mpu6050Flex_Data32_t AccData;
-}Mpu6050Flex_FullImuData32_t;
+	Mpu6050Flex_RawData32_t GyroData;
+	Mpu6050Flex_RawData32_t AccData;
+}Mpu6050Flex_FullImuRawData32_t;
 
 
 void Mpu6050Flex_SetIOWrite(IOFunc_t pWriteFunc);

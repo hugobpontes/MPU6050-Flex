@@ -13,15 +13,6 @@
 #include <string.h>
 #include <stddef.h>
 /**
- * @brief Type representing a structure containing the current set scale between accelerometer and
- * gyro measurements and the physical units (g and deg/s) in which they're represented (scale = FullScaleRange/((1<<16)-1))
- */
-typedef struct Mpu6050ScaleStruct
-{
-	float AccScale;
-	float GyroScale;
-} Mpu6050Flex_Scale_t;
-/**
  * @brief Type representing a structure containing all configurable parameters in the Mpu6050 library.
  *
  */
@@ -30,6 +21,8 @@ typedef struct Mpu6050ConfigStruct
 	IOFunc_t pIOWrite; /**< Pointer to the function used to write bytes to the mpu6050 registers */
 	IOFunc_t pIORead;  /**< Pointer to the function used to read bytes from the mpu6050 registers */
 	DelayFunc_t pDelay;/**< Pointer to the function used delay a given amount of ms */
+	int16_t AccScale;
+	int16_t GyroScale;
 } Mpu6050Flex_Config_t;
 
 #define CALIBRATION_DURATION 3000 		/**< Duration of calibration period */
@@ -37,22 +30,22 @@ typedef struct Mpu6050ConfigStruct
 #define POW_2(n) (1 << (n))				/**< Macro to compute power of two */
 #define CALIBRATION_DELAY ((CALIBRATION_DURATION)/(POW_2(CALIBRATION_ITERATIONS_PO2))) /**< Calibration delay to match above settings */
 
-#define SCALE_MPU6050FLEX_GYRO_FS_SEL_250 	(500/((1<<16)-1))
-#define SCALE_MPU6050FLEX_GYRO_FS_SEL_500 	(1000/((1<<16)-1))
-#define SCALE_MPU6050FLEX_GYRO_FS_SEL_1000 	(2000/((1<<16)-1))
-#define SCALE_MPU6050FLEX_GYRO_FS_SEL_2000 	(4000/((1<<16)-1))
-#define SCALE_MPU6050FLEX_ACC_FS_SEL_2		(4/((1<<16)-1))
-#define SCALE_MPU6050FLEX_ACC_FS_SEL_4		(8/((1<<16)-1))
-#define SCALE_MPU6050FLEX_ACC_FS_SEL_8		(16/((1<<16)-1))
-#define SCALE_MPU6050FLEX_ACC_FS_SEL_16		(32/((1<<16)-1))
+#define SCALE_MPU6050FLEX_GYRO_FS_SEL_250 	131 //~(((1<<16)-1)/500)
+#define SCALE_MPU6050FLEX_GYRO_FS_SEL_500 	66 //~(((1<<16)-1)/1000)
+#define SCALE_MPU6050FLEX_GYRO_FS_SEL_1000 	33 //~(((1<<16)-1)/2000)
+#define SCALE_MPU6050FLEX_GYRO_FS_SEL_2000 	16 //~(((1<<16)-1)/4000)
+#define SCALE_MPU6050FLEX_ACC_FS_SEL_2		16383 //~(((1<<16)-1)/4)
+#define SCALE_MPU6050FLEX_ACC_FS_SEL_4		8192 //~(((1<<16)-1)/8)
+#define SCALE_MPU6050FLEX_ACC_FS_SEL_8		4096 //~(((1<<16)-1)/16)
+#define SCALE_MPU6050FLEX_ACC_FS_SEL_16		2048 //~(((1<<16)-1)/32)
 
 /*Static function declarations*/
 static MPU6050Flex_Status_t Mpu6050Flex_ReplaceRegisterSegment(uint8_t Register,uint8_t SegmentMask, uint8_t Value);
 static MPU6050Flex_Status_t Mpu6050Flex_WriteFullRegister(uint8_t Register, uint8_t Value);
 static bool Mpu6050Flex_ValueFitsInMask(uint8_t Option, uint8_t Mask);
 static MPU6050Flex_Status_t Mpu6050Flex_UpdateParameter(uint8_t ParameterValue, uint8_t ParameterMask, uint8_t RegisterAddress);
-static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuData32_t* pDest, Mpu6050Flex_ImuRawData_t* pAccData, Mpu6050Flex_ImuRawData_t* pGyroData);
-static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuRawData_t* pDest, Mpu6050Flex_FullImuData32_t* pOrig, uint8_t RightShift);
+static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuRawData32_t* pDest, Mpu6050Flex_ImuRawData_t* pAccData, Mpu6050Flex_ImuRawData_t* pGyroData);
+static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuRawData_t* pDest, Mpu6050Flex_FullImuRawData32_t* pOrig, uint8_t RightShift);
 static void Mpu6050Flex_SubtractImuDataStruct(Mpu6050Flex_ImuRawData_t* pA, Mpu6050Flex_ImuRawData_t* pB);
 
 /**
@@ -67,12 +60,6 @@ static Mpu6050Flex_Config_t Mpu6050Config =
 	.pIORead = NULL,
 	.pIOWrite = NULL,
 	.pDelay = NULL,
-};
-/**
- * @brief Mpu6050 Configuration struct
- */
-static Mpu6050Flex_Scale_t Mpu6050Scale =
-{
 	.AccScale = 	SCALE_MPU6050FLEX_ACC_FS_SEL_2,
 	.GyroScale = 	SCALE_MPU6050FLEX_GYRO_FS_SEL_250,
 };
@@ -205,16 +192,16 @@ MPU6050Flex_Status_t Mpu6050Flex_ConfigGyroFullScaleRange(MPU6050Flex_GYRO_FS_SE
 		switch (ConfigOption)
 		{
 		case MPU6050FLEX_GYRO_FS_SEL_250:
-			Mpu6050Scale.GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_250;
+			Mpu6050Config.GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_250;
 			break;
 		case MPU6050FLEX_GYRO_FS_SEL_500:
-			Mpu6050Scale.GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_500;
+			Mpu6050Config.GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_500;
 			break;
 		case MPU6050FLEX_GYRO_FS_SEL_1000:
-			Mpu6050Scale.GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_1000;
+			Mpu6050Config.GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_1000;
 			break;
 		case MPU6050FLEX_GYRO_FS_SEL_2000:
-			Mpu6050Scale.GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_2000;
+			Mpu6050Config.GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_2000;
 			break;
 		}
 	}
@@ -245,16 +232,16 @@ MPU6050Flex_Status_t Mpu6050Flex_ConfigAccFullScaleRange(MPU6050Flex_ACC_FS_SEL_
 			switch (ConfigOption)
 			{
 			case MPU6050FLEX_ACC_FS_SEL_2:
-				Mpu6050Scale.AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_2;
+				Mpu6050Config.AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_2;
 				break;
 			case MPU6050FLEX_ACC_FS_SEL_4:
-				Mpu6050Scale.AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_4;
+				Mpu6050Config.AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_4;
 				break;
 			case MPU6050FLEX_ACC_FS_SEL_8:
-				Mpu6050Scale.AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_8;
+				Mpu6050Config.AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_8;
 				break;
 			case MPU6050FLEX_ACC_FS_SEL_16:
-				Mpu6050Scale.AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_16;
+				Mpu6050Config.AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_16;
 				break;
 			}
 		}
@@ -446,6 +433,20 @@ Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetAccelData()
 
 	return RetData;
 }
+
+Mpu6050Flex_ImuFloatData_t Mpu6050Flex_GetAccelDataG()
+{
+	Mpu6050Flex_ImuRawData_t AccData;
+	Mpu6050Flex_ImuFloatData_t AccFloatData;
+
+	AccData = Mpu6050Flex_GetAccelData();
+
+	AccFloatData.FloatDataX = (float) AccData.RawDataX / Mpu6050Config.AccScale;
+	AccFloatData.FloatDataX = (float) AccData.RawDataY / Mpu6050Config.AccScale;
+	AccFloatData.FloatDataX = (float) AccData.RawDataZ / Mpu6050Config.AccScale;
+
+	return AccFloatData;
+}
 /**
  * @brief Reads 6 bytes of gyro IMU data and
  * returns a imu data struct with read data
@@ -471,6 +472,22 @@ Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetGyroData()
 
 	return RetData;
 }
+
+Mpu6050Flex_ImuFloatData_t Mpu6050Flex_GetGyroDataDegPerSec()
+{
+	Mpu6050Flex_ImuRawData_t GyroData;
+	Mpu6050Flex_ImuFloatData_t GyroFloatData;
+
+	GyroData = Mpu6050Flex_GetGyroData();
+
+	GyroFloatData.FloatDataX = (float) GyroData.RawDataX / Mpu6050Config.GyroScale;
+	GyroFloatData.FloatDataX = (float) GyroData.RawDataY / Mpu6050Config.GyroScale;
+	GyroFloatData.FloatDataX = (float) GyroData.RawDataZ / Mpu6050Config.GyroScale;
+
+	return GyroFloatData;
+}
+
+
 /**
  * @brief Function used to be obtain the current calibration offset values for the accelerometer and gyro readings
  *
@@ -496,16 +513,16 @@ static void Mpu6050Flex_SubtractImuDataStruct(Mpu6050Flex_ImuRawData_t* pA, Mpu6
 }
 /**
  * @brief Adds the fields of two (accel and gyro) given Mpu6050Flex_ImuRawData_t struct
- * to a target Mpu6050Flex_FullImuData32_t struct containing gyro and accel data.
+ * to a target Mpu6050Flex_FullImuRawData32_t struct containing gyro and accel data.
  * This function is nominally used to accumulate imu data readings in a struct with 32 bit elements
  * that can go over the 16bit limit of the default struct when calculating reading average for calibration purposes
  *
- * @param pDest: Pointer to the target Mpu6050Flex_FullImuData32_t struct in which data is accumulated
+ * @param pDest: Pointer to the target Mpu6050Flex_FullImuRawData32_t struct in which data is accumulated
  * @param pAccData: Pointer to a Mpu6050Flex_ImuRawData_t struct containing accel data. Nominally pointer to a just read set of accel readings
  * @param pGyroData: Pointer to a Mpu6050Flex_ImuRawData_t struct containing gyro data. Nominally pointer to a just read set of accel readings
  *
  */
-static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuData32_t* pDest, Mpu6050Flex_ImuRawData_t* pAccData, Mpu6050Flex_ImuRawData_t* pGyroData)
+static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuRawData32_t* pDest, Mpu6050Flex_ImuRawData_t* pAccData, Mpu6050Flex_ImuRawData_t* pGyroData)
 {
 	pDest->AccData.RawDataX 	=  pDest->AccData.RawDataX + pAccData->RawDataX;
 	pDest->AccData.RawDataY 	=  pDest->AccData.RawDataY + pAccData->RawDataY;
@@ -529,7 +546,7 @@ static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuData32_t*
  * (ex. RightShift = 2 -> Struct will be divided by 2^2 = 4)
  *
  */
-static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuRawData_t* pDest, Mpu6050Flex_FullImuData32_t* pOrig, uint8_t RightShift)
+static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuRawData_t* pDest, Mpu6050Flex_FullImuRawData32_t* pOrig, uint8_t RightShift)
 {
 	pDest->AccData.RawDataX =  pOrig->AccData.RawDataX >> RightShift;
 	pDest->AccData.RawDataY =  pOrig->AccData.RawDataY >> RightShift;
@@ -549,7 +566,7 @@ static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuRawData_t* pD
  */
 MPU6050Flex_Status_t Mpu6050Flex_Calibrate()
 {
-	Mpu6050Flex_FullImuData32_t TempFullImuData = {0};
+	Mpu6050Flex_FullImuRawData32_t TempFullImuData = {0};
 	Mpu6050Flex_ImuRawData_t TempAccData;
 	Mpu6050Flex_ImuRawData_t TempGyroData;
 
