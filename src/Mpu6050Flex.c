@@ -33,6 +33,7 @@ typedef struct Mpu6050ConfigStruct
 #define POW_2(n) (1 << (n))				/**< Macro to compute power of two */
 #define CALIBRATION_DELAY ((CALIBRATION_DURATION)/(POW_2(CALIBRATION_ITERATIONS_PO2))) /**< Calibration delay to match above settings */
 
+//SCALE -> Ratio between 2^16 (16 bit resolution) and the available full scale range options (including negative values)
 #define SCALE_MPU6050FLEX_GYRO_FS_SEL_250 	131 //~(((1<<16)-1)/500)
 #define SCALE_MPU6050FLEX_GYRO_FS_SEL_500 	66 //~(((1<<16)-1)/1000)
 #define SCALE_MPU6050FLEX_GYRO_FS_SEL_1000 	33 //~(((1<<16)-1)/2000)
@@ -55,6 +56,10 @@ static void Mpu6050Flex_SubtractImuDataStruct(Mpu6050Flex_ImuRawData_t* pA, Mpu6
  * @brief Calibration offsets struct used for the imu data readings
  */
 static Mpu6050Flex_FullImuRawData_t Mpu6050ImuDataOffset = {0};
+/**
+ * @brief Variable used to keep track of the last time a
+ * gyro measurement was used to compute attitude. Is initially set during calibration
+ */
 static uint32_t LastGyroReadTime = 0;
 /**
  * @brief Mpu6050 Configuration struct
@@ -67,7 +72,11 @@ static Mpu6050Flex_Config_t Mpu6050Config =
 	.AccScale = 	SCALE_MPU6050FLEX_ACC_FS_SEL_2,
 	.GyroScale = 	SCALE_MPU6050FLEX_GYRO_FS_SEL_250,
 };
-
+/**
+ * @brief Gets the time (in ms since program start) of the last gyro measurement used for attitude computation
+ *
+ * @return time of the last gyro measurement used for attitude computation
+ */
 uint32_t Mpu6050Flex_GetLastGyroReadTime()
 {
 	return LastGyroReadTime;
@@ -100,7 +109,11 @@ void Mpu6050Flex_SetDelay(DelayFunc_t pDelay)
 {
 	Mpu6050Config.pDelay = pDelay;
 }
-
+/**
+ * @brief Injects the get milliseconds since program start function that this library uses
+ *
+ * @param pGetMsFunction Pointer that points to the get milliseconds since program start function to use
+ */
 void Mpu6050Flex_SetGetMs(GetMsFunc_t pGetMs)
 {
 	Mpu6050Config.pGetMs = pGetMs;
@@ -133,22 +146,39 @@ DelayFunc_t Mpu6050Flex_GetDelay()
 {
 	return Mpu6050Config.pDelay;
 }
-
+/**
+ * @brief Gets the currently set accelerometer scale.
+ * SCALE -> Ratio between 2^16 (16 bit resolution) and the available full scale range options (including negative values)
+ *
+ * @return currently set accelerometer scale.
+ */
 int16_t Mpu6050Flex_GetAccScale()
 {
 	return Mpu6050Config.AccScale;
 }
-
+/**
+ * @brief Gets the currently set gyro scale.
+ * SCALE -> Ratio between 2^16 (16 bit resolution) and the available full scale range options (including negative values)
+ *
+ * @return currently set gyro scale.
+ */
 int16_t Mpu6050Flex_GetGyroScale()
 {
 	return Mpu6050Config.GyroScale;
 }
-
+/**
+ * @brief Sets the gyro and accelerometer coefficients of the used complementary filter
+ *
+ * @param GyroCoeff Gyroscope coefficeient of the complementary filter used (0.0-1.0)
+ * @param AccCoeff Accelerometer coefficeient of the complementary filter used (0.0-1.0)
+ *
+ * @return Status code to access operation success
+ */
 MPU6050Flex_Status_t Mpu6050Flex_SetComplementaryFilterCoeffs(float GyroCoeff, float AccCoeff)
 {
 	MPU6050Flex_Status_t Status = MPU6050FLEX_SUCCESS;
 	float sum = GyroCoeff + AccCoeff;
-	if (sum == 1.0)
+	if ((GyroCoeff > 0) && (AccCoeff > 0) && (sum == 1.0))
 	{
 		Mpu6050Config.AccCFCoefficient = AccCoeff;
 		Mpu6050Config.GyroCFCoefficient = GyroCoeff;
@@ -160,12 +190,20 @@ MPU6050Flex_Status_t Mpu6050Flex_SetComplementaryFilterCoeffs(float GyroCoeff, f
 
 	return Status;
 }
-
+/**
+ * @brief Gets the currently set gyro complementary filter coefficient
+ *
+ * @return currently set gyro complementary filter coefficient.
+ */
 float Mpu6050Flex_GetGyroCFCoeff()
 {
 	return Mpu6050Config.GyroCFCoefficient;
 }
-
+/**
+ * @brief Gets the currently set accelerometer complementary filter coefficient
+ *
+ * @return currently set accelerometer complementary filter coefficient.
+ */
 float Mpu6050Flex_GetAccCFCoeff()
 {
 	return Mpu6050Config.AccCFCoefficient;
@@ -487,7 +525,12 @@ Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetAccelData()
 
 	return RetData;
 }
-
+/**
+ * @brief Reads 6 bytes of accelerometer IMU data, subtracts previously computed calibration offset, divides the read data by the
+ * set scale, and returns a imu float data struct with the data in g's
+ *
+ * @return Struct containing acceleration data in g's or empty struct if any of the underlying function steps fails.
+ */
 Mpu6050Flex_ImuFloatData_t Mpu6050Flex_GetAccelDataG()
 {
 	Mpu6050Flex_ImuRawData_t AccData;
@@ -526,7 +569,12 @@ Mpu6050Flex_ImuRawData_t Mpu6050Flex_GetGyroData()
 
 	return RetData;
 }
-
+/**
+ * @brief Reads 6 bytes of gyro IMU data, subtracts previously computed calibration offset, divides the read data by the
+ * set scale, and returns a imu float data struct with the data in deg/s
+ *
+ * @return Struct containing gyro data in deg/s or empty struct if any of the underlying function steps fails.
+ */
 Mpu6050Flex_ImuFloatData_t Mpu6050Flex_GetGyroDataDegPerSec()
 {
 	Mpu6050Flex_ImuRawData_t GyroData;
@@ -540,7 +588,6 @@ Mpu6050Flex_ImuFloatData_t Mpu6050Flex_GetGyroDataDegPerSec()
 
 	return GyroFloatData;
 }
-
 
 /**
  * @brief Function used to be obtain the current calibration offset values for the accelerometer and gyro readings
@@ -667,7 +714,11 @@ MPU6050Flex_Status_t Mpu6050Flex_Calibrate()
 
 	return Status;
 }
-
+/**
+ * @brief Updates the SLEEP parameter of the PWR_MGMT_1, turning it ON.
+ *
+ * @return Status code to access operation success
+ */
 MPU6050Flex_Status_t Mpu6050Flex_Sleep()
 {
 	MPU6050Flex_Status_t Status;
@@ -675,7 +726,11 @@ MPU6050Flex_Status_t Mpu6050Flex_Sleep()
 
 	return Status;
 }
-
+/**
+ * @brief Updates the SLEEP parameter of the PWR_MGMT_1, turning it OFF.
+ *
+ * @return Status code to access operation success
+ */
 MPU6050Flex_Status_t Mpu6050Flex_WakeUp()
 {
 	MPU6050Flex_Status_t Status;
