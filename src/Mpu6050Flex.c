@@ -747,3 +747,17 @@ MPU6050Flex_Status_t Mpu6050Flex_WakeUp()
 
 	return Status;
 }
+
+//Function to return euler
+
+	//gets acc
+	//gets gyro
+	//gets ellapsed time
+	//set last gyro read
+	//gets acc euler
+	//gets gyro euler
+	//gets filtered attitude
+	//set last attitude
+
+//static Function for calculating acc euler from acc data (target euler struct, accx, accy, accz)
+//static Function for calculating acc euler from gyro data (target euler struct, accx, accy, accz,ellapsed time,last known attitude)

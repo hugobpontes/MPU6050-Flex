@@ -138,9 +138,9 @@ typedef struct Mpu6050Flex_FloatData
  */
 typedef struct Mpu6050Flex_ImuData32
 {
-	uint32_t DataX;
-	uint32_t DataY;
-	uint32_t DataZ;
+	int32_t DataX;
+	int32_t DataY;
+	int32_t DataZ;
 }Mpu6050Flex_ImuData32_t;
 /**
  * @brief Struct containing all IMU data readings provided by MPU6050 (gyro+accel) for 3 axes in 16 bit format

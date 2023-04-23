@@ -4,6 +4,34 @@
 
 #include "Mpu6050_MockIO.h"
 #include <stdbool.h>
+
+/*This needs refactoring obviously*/
+/*Tests for strange conditions like sensor being saturated (or close) during
+ * calibration, lack of calibration, or off-nominal attitude conditions aren't done
+ * so those cases are unhandled.
+ * Providing a super robust library is beyond my goal with writing this library */
+uint8_t DataOut[6] = {0x22,0x11,0x44,0x33,0x66,0x55};
+uint16_t DataOut16bit[3] = {0x1122,0x3344,0x5566};
+
+uint8_t AccCalibData1[6] = {0x00,0x00,0x00,0x02,0x01,0x5F}; //1st set of readings
+uint8_t AccCalibData2[6] = {0x00,0x01,0x00,0x03,0x01,0x5F}; //2nd set of readings
+uint8_t AccCalibData3[6] = {0x00,0x01,0x00,0x03,0x01,0x5F}; //3rd set of readings
+uint8_t AccCalibData4[6] = {0x00,0x02,0x00,0x04,0x01,0x5F}; //4th set of readings
+
+uint8_t GyroCalibData1[6] = {0x00,0x07,0x00,0x00,0x05,0x0E}; //1st set of readings
+uint8_t GyroCalibData2[6] = {0x00,0x08,0x00,0x01,0x05,0x0E}; //2nd set of readings
+uint8_t GyroCalibData3[6] = {0x00,0x08,0x00,0x01,0x05,0x0E}; //3rd set of readings
+uint8_t GyroCalibData4[6] = {0x00,0x09,0x00,0x02,0x05,0x0E}; //4th set of readings
+
+uint16_t CalibOffsetData[6] = {0x0800,0x0100,0x0E05,0x0100,0x0300,0x5F01-0x4000};
+
+uint16_t GyroDataOut16bitAfterCalib[3] = {0x1122-0x0800,0x3344-0x0100,0x5566-0x0E05};
+uint16_t AccDataOut16bitAfterCalib[3] = {0x1122-0x0100,0x3344-0x0300,0x5566-(0x5F01-0x4000)};
+
+//Expected gyro euler
+//Expected acc euler
+//Expected filtered euler
+
 /**
  * @brief Compares two Mpu6050Flex_ImuData_t structs
  *
@@ -79,13 +107,12 @@ static void SetupParameterUpdateExpectations(uint8_t ExpReadValue,
  */
 static void SetupDataFunctionExpectations(Mpu6050Flex_ImuData_t* pExpData, uint8_t DataReg)
 {
-	uint8_t DataOut[6] = {0xBB,0xAA,0xDD,0xCC,0xFF,0xEE};
 
 	MockMpu6050IO_ExpectReadAndReturn(DataReg,6,DataOut);
 
-	pExpData->DataX = 0xAABB;
-	pExpData->DataY = 0xCCDD;
-	pExpData->DataZ = 0xEEFF;
+	pExpData->DataX = DataOut16bit[0];
+	pExpData->DataY = DataOut16bit[1];
+	pExpData->DataZ = DataOut16bit[2];
 }
 /**
  * @brief Sets up mock expectations for an Imu Calibrated Data Read (expect calibration reads and a read of 6 imu data bytes)
@@ -97,7 +124,7 @@ static void SetupDataFunctionExpectations(Mpu6050Flex_ImuData_t* pExpData, uint8
  */
 static void SetupCalibratedDataFunctionExpectations(Mpu6050Flex_ImuData_t* pExpData, uint8_t DataReg)
 {
-	uint8_t DataOut[6] = {0xBB,0xAA,0xDD,0xCC,0xFF,0xEE};
+
 
 	/*Expected read of 6 data bytes*/
 	MockMpu6050IO_ExpectReadAndReturn(DataReg,6,DataOut);
@@ -109,15 +136,15 @@ static void SetupCalibratedDataFunctionExpectations(Mpu6050Flex_ImuData_t* pExpD
 	/*Assign expected return values in struct, considering currently set calibration offset */
 	if (DataReg == REG_GYRO_XOUT_H)
 	{
-		pExpData->DataX = 0xAABB - ImuDataOffset.GyroData.DataX;
-		pExpData->DataY = 0xCCDD - ImuDataOffset.GyroData.DataY;
-		pExpData->DataZ = 0xEEFF - ImuDataOffset.GyroData.DataZ;
+		pExpData->DataX = GyroDataOut16bitAfterCalib[0];
+		pExpData->DataY = GyroDataOut16bitAfterCalib[1];
+		pExpData->DataZ = GyroDataOut16bitAfterCalib[2];
 	}
 	else if (REG_ACCEL_XOUT_H)
 	{
-		pExpData->DataX = 0xAABB - ImuDataOffset.AccData.DataX;
-		pExpData->DataY = 0xCCDD - ImuDataOffset.AccData.DataY;
-		pExpData->DataZ = 0xEEFF - ImuDataOffset.AccData.DataZ;
+		pExpData->DataX = AccDataOut16bitAfterCalib[0];
+		pExpData->DataY = AccDataOut16bitAfterCalib[1];
+		pExpData->DataZ = AccDataOut16bitAfterCalib[2];
 	}
 }
 
@@ -126,24 +153,15 @@ static void SetupCalibratedDataFunctionExpectations(Mpu6050Flex_ImuData_t* pExpD
  */
 static void SetupCalibrationExpectations()
 {
-	uint8_t AccData1[6] = {0x00,0x70,0x00,0x72,0x01,0x7F}; //1st set of readings
-	uint8_t AccData2[6] = {0x00,0x71,0x00,0x73,0x01,0x7F}; //2nd set of readings
-	uint8_t AccData3[6] = {0x00,0x71,0x00,0x73,0x01,0x7F}; //3rd set of readings
-	uint8_t AccData4[6] = {0x00,0x72,0x00,0x74,0x01,0x7F}; //4th set of readings
 
-	uint8_t GyroData1[6] = {0x00,0x77,0x00,0x70,0x05,0x7E}; //1st set of readings
-	uint8_t GyroData2[6] = {0x00,0x78,0x00,0x71,0x05,0x7E}; //2nd set of readings
-	uint8_t GyroData3[6] = {0x00,0x78,0x00,0x71,0x05,0x7E}; //3rd set of readings
-	uint8_t GyroData4[6] = {0x00,0x79,0x00,0x72,0x05,0x7E}; //4th set of readings
-
-	MockMpu6050IO_ExpectReadAndReturn(REG_ACCEL_XOUT_H,6,AccData1);
-	MockMpu6050IO_ExpectReadAndReturn(REG_GYRO_XOUT_H,6,GyroData1);
-	MockMpu6050IO_ExpectReadAndReturn(REG_ACCEL_XOUT_H,6,AccData2);
-	MockMpu6050IO_ExpectReadAndReturn(REG_GYRO_XOUT_H,6,GyroData2);
-	MockMpu6050IO_ExpectReadAndReturn(REG_ACCEL_XOUT_H,6,AccData3);
-	MockMpu6050IO_ExpectReadAndReturn(REG_GYRO_XOUT_H,6,GyroData3);
-	MockMpu6050IO_ExpectReadAndReturn(REG_ACCEL_XOUT_H,6,AccData4);
-	MockMpu6050IO_ExpectReadAndReturn(REG_GYRO_XOUT_H,6,GyroData4);
+	MockMpu6050IO_ExpectReadAndReturn(REG_ACCEL_XOUT_H,6,AccCalibData1);
+	MockMpu6050IO_ExpectReadAndReturn(REG_GYRO_XOUT_H,6,GyroCalibData1);
+	MockMpu6050IO_ExpectReadAndReturn(REG_ACCEL_XOUT_H,6,AccCalibData2);
+	MockMpu6050IO_ExpectReadAndReturn(REG_GYRO_XOUT_H,6,GyroCalibData2);
+	MockMpu6050IO_ExpectReadAndReturn(REG_ACCEL_XOUT_H,6,AccCalibData3);
+	MockMpu6050IO_ExpectReadAndReturn(REG_GYRO_XOUT_H,6,GyroCalibData3);
+	MockMpu6050IO_ExpectReadAndReturn(REG_ACCEL_XOUT_H,6,AccCalibData4);
+	MockMpu6050IO_ExpectReadAndReturn(REG_GYRO_XOUT_H,6,GyroCalibData4);
 	MockMpu6050IO_ExpectGetMsAndReturn(25);
 }
 
@@ -430,12 +448,12 @@ TEST(Mpu6050CalibratedTests,CalibrateWritesAverageReadDataInInternalStructure)
 	Mpu6050Flex_FullImuData_t ActualDataStruct;
 	Mpu6050Flex_FullImuData_t ExpectedDataStruct =
 	{
-		.GyroData.DataX 	= 0x7800,
-		.GyroData.DataY 	= 0x7100,
-		.GyroData.DataZ 	= 0x7E05,
-		.AccData.DataX 		= 0x7100,
-		.AccData.DataY 		= 0x7300,
-		.AccData.DataZ 		= 0x7F01-0x4000,
+		.GyroData.DataX 	= CalibOffsetData[0],
+		.GyroData.DataY 	= CalibOffsetData[1],
+		.GyroData.DataZ 	= CalibOffsetData[2],
+		.AccData.DataX 		= CalibOffsetData[3],
+		.AccData.DataY 		= CalibOffsetData[4],
+		.AccData.DataZ 		= CalibOffsetData[5],
 	};
 
 	ActualDataStruct = Mpu6050Flex_GetImuDataOffsets();
@@ -466,6 +484,7 @@ TEST(Mpu6050CalibratedTests,GetGyroDataFollowsCorrectOrderAndReturnsExpectedData
 
 	ActualGyroData = Mpu6050Flex_GetGyroData();
 
+	printf("Output Gyro Data: [0x%.4x][0x%.4x][0x%.4x]\n",ActualGyroData.DataX,ActualGyroData.DataY,ActualGyroData.DataZ);
 	TEST_ASSERT(CompareDataStructs(&ExpectedGyroData,&ActualGyroData));
 
 }
@@ -482,16 +501,25 @@ TEST(Mpu6050CalibratedTests,GetAccDataFollowsCorrectOrderAndReturnsExpectedData)
 
 	ActualAccData = Mpu6050Flex_GetAccelData();
 
+	printf("Output Acc Data: [0x%.4x][0x%.4x][0x%.4x]\n",ActualAccData.DataX,ActualAccData.DataY,ActualAccData.DataZ);
 	TEST_ASSERT(CompareDataStructs(&ExpectedAccData,&ActualAccData));
 
 }
 
 
-TEST(Mpu6050CalibratedTests,GetAccEulerFollowsCorrectOrderAndReturnsExpectedData)
+TEST(Mpu6050CalibratedTests,GetEulerFollowsCorrectOrderAndReturnsExpectedData)
 {
+
+	/*Expected read of 6 data bytes*/
+	MockMpu6050IO_ExpectReadAndReturn(0x43,6,DataOut);
+	MockMpu6050IO_ExpectReadAndReturn(0x3B,6,DataOut);
+
+	//test that returned euler angles are correct for data out set in the beginning of this file
+	//considering last gyro time and last known attitude are set during calibration
+
 	TEST_ASSERT(0);
 }
-//Test for accel get euler
-//test for gyro get euler -> remember, this takes into account past measurements (which include acceleromter contributions)
-//test for get euler (calls other two and computes euler based on coeffs)
+
+//TEST: get euler sets last known attitude and last gyro read time
+
 

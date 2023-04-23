@@ -33,5 +33,5 @@ TEST_GROUP_RUNNER(Mpu6050CalibratedTests)
 	RUN_TEST_CASE(Mpu6050CalibratedTests, CalibrateSetsLastGyroReadTime);
 	RUN_TEST_CASE(Mpu6050CalibratedTests, GetGyroDataFollowsCorrectOrderAndReturnsExpectedData);
 	RUN_TEST_CASE(Mpu6050CalibratedTests, GetAccDataFollowsCorrectOrderAndReturnsExpectedData);
-	RUN_TEST_CASE(Mpu6050CalibratedTests, GetAccEulerFollowsCorrectOrderAndReturnsExpectedData);
+	RUN_TEST_CASE(Mpu6050CalibratedTests, GetEulerFollowsCorrectOrderAndReturnsExpectedData);
 }
