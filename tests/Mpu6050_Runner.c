@@ -6,6 +6,7 @@ TEST_GROUP_RUNNER(Mpu6050SetupTests)
   RUN_TEST_CASE(Mpu6050SetupTests, SetWriteIOSetsCorrectly);
   RUN_TEST_CASE(Mpu6050SetupTests, SetReadIOSetsCorrectly);
   RUN_TEST_CASE(Mpu6050SetupTests, SetDelaySetsCorrectly);
+  RUN_TEST_CASE(Mpu6050SetupTests, SetGetMsSetsCorrectly);
 }
 
 TEST_GROUP_RUNNER(Mpu6050Tests)
@@ -32,4 +33,5 @@ TEST_GROUP_RUNNER(Mpu6050CalibratedTests)
 	RUN_TEST_CASE(Mpu6050CalibratedTests, CalibrateSetsLastGyroReadTime);
 	RUN_TEST_CASE(Mpu6050CalibratedTests, GetGyroDataFollowsCorrectOrderAndReturnsExpectedData);
 	RUN_TEST_CASE(Mpu6050CalibratedTests, GetAccDataFollowsCorrectOrderAndReturnsExpectedData);
+	RUN_TEST_CASE(Mpu6050CalibratedTests, GetAccEulerFollowsCorrectOrderAndReturnsExpectedData);
 }
