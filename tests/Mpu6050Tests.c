@@ -28,6 +28,8 @@ uint16_t CalibOffsetData[6] = {0x0800,0x0100,0x0E05,0x0100,0x0300,0x5F01-0x4000}
 uint16_t GyroDataOut16bitAfterCalib[3] = {0x1122-0x0800,0x3344-0x0100,0x5566-0x0E05};
 uint16_t AccDataOut16bitAfterCalib[3] = {0x1122-0x0100,0x3344-0x0300,0x5566-(0x5F01-0x4000)};
 
+static Mpu6050Flex_t Mpu6050;
+
 //Expected gyro euler
 //Expected acc euler
 //Expected filtered euler
@@ -131,7 +133,7 @@ static void SetupCalibratedDataFunctionExpectations(Mpu6050Flex_ImuData_t* pExpD
 
 	Mpu6050Flex_FullImuData_t ImuDataOffset;
 
-	ImuDataOffset = Mpu6050Flex_GetImuDataOffsets();
+	ImuDataOffset = Mpu6050Flex_GetImuDataOffsets(Mpu6050);
 
 	/*Assign expected return values in struct, considering currently set calibration offset */
 	if (DataReg == REG_GYRO_XOUT_H)
@@ -173,12 +175,15 @@ TEST_GROUP(Mpu6050SetupTests);
 TEST_SETUP(Mpu6050SetupTests)
 {
 	MockMpu6050IO_Create(20);
+	Mpu6050 = Mpu6050Flex_Create();
 }
 
 TEST_TEAR_DOWN(Mpu6050SetupTests)
 {
 	MockMpu6050IO_VerifyComplete();
 	MockMpu6050IO_Destroy();
+	Mpu6050Flex_Destroy(Mpu6050);
+
 }
 
 /**
@@ -186,36 +191,36 @@ TEST_TEAR_DOWN(Mpu6050SetupTests)
  */
 TEST(Mpu6050SetupTests,SetWriteIOSetsCorrectly)
 {
-	Mpu6050Flex_SetIOWrite(MockMpu6050IO_Write);
+	Mpu6050Flex_SetIOWrite(Mpu6050,MockMpu6050IO_Write);
 
-	TEST_ASSERT_POINTERS_EQUAL(MockMpu6050IO_Write,Mpu6050Flex_GetIOWrite());
+	TEST_ASSERT_POINTERS_EQUAL(MockMpu6050IO_Write,Mpu6050Flex_GetIOWrite(Mpu6050));
 }
 /**
  * @brief Tests that Mpu6050Flex_SetIORead sets IO read function pointer appropriately
  */
 TEST(Mpu6050SetupTests,SetReadIOSetsCorrectly)
 {
-	Mpu6050Flex_SetIORead(MockMpu6050IO_ReadAndReturn);
+	Mpu6050Flex_SetIORead(Mpu6050,MockMpu6050IO_ReadAndReturn);
 
-	TEST_ASSERT_POINTERS_EQUAL(MockMpu6050IO_ReadAndReturn,Mpu6050Flex_GetIORead());
+	TEST_ASSERT_POINTERS_EQUAL(MockMpu6050IO_ReadAndReturn,Mpu6050Flex_GetIORead(Mpu6050));
 }
 /**
  * @brief Tests that Mpu6050Flex_SetDelay sets delay function pointer appropriately
  */
 TEST(Mpu6050SetupTests,SetDelaySetsCorrectly)
 {
-	Mpu6050Flex_SetDelay(MockMpu6050_Delay);
+	Mpu6050Flex_SetDelay(Mpu6050,MockMpu6050_Delay);
 
-	TEST_ASSERT_POINTERS_EQUAL(MockMpu6050_Delay,Mpu6050Flex_GetDelay());
+	TEST_ASSERT_POINTERS_EQUAL(MockMpu6050_Delay,Mpu6050Flex_GetDelay(Mpu6050));
 }
 /**
  * @brief Tests that Mpu6050Flex_SetGetMs sets Get Milliseconds function pointer appropriately
  */
 TEST(Mpu6050SetupTests,SetGetMsSetsCorrectly)
 {
-	Mpu6050Flex_SetGetMs(MockMpu6050_GetMs);
+	Mpu6050Flex_SetGetMs(Mpu6050,MockMpu6050_GetMs);
 
-	TEST_ASSERT_POINTERS_EQUAL(MockMpu6050_GetMs,Mpu6050Flex_GetGetMs());
+	TEST_ASSERT_POINTERS_EQUAL(MockMpu6050_GetMs,Mpu6050Flex_GetGetMs(Mpu6050));
 }
 ///----------------------------------------------------------------------------
 /**
@@ -226,16 +231,19 @@ TEST_GROUP(Mpu6050Tests);
 TEST_SETUP(Mpu6050Tests)
 {
 	MockMpu6050IO_Create(20);
-	Mpu6050Flex_SetIORead(MockMpu6050IO_ReadAndReturn);
-	Mpu6050Flex_SetIOWrite(MockMpu6050IO_Write);
-	Mpu6050Flex_SetDelay(MockMpu6050_Delay);
-	Mpu6050Flex_SetGetMs(MockMpu6050_GetMs);
+	Mpu6050 = Mpu6050Flex_Create();
+
+	Mpu6050Flex_SetIORead(Mpu6050,MockMpu6050IO_ReadAndReturn);
+	Mpu6050Flex_SetIOWrite(Mpu6050,MockMpu6050IO_Write);
+	Mpu6050Flex_SetDelay(Mpu6050,MockMpu6050_Delay);
+	Mpu6050Flex_SetGetMs(Mpu6050,MockMpu6050_GetMs);
 }
 
 TEST_TEAR_DOWN(Mpu6050Tests)
 {
 	MockMpu6050IO_VerifyComplete();
 	MockMpu6050IO_Destroy();
+	Mpu6050Flex_Destroy(Mpu6050);
 }
 /**
  * @brief Tests that Mpu6050Flex_WhoAmI follows correct sequence of interactions with the mpu6050 device
@@ -245,7 +253,7 @@ TEST(Mpu6050Tests,ReadWhoAmIFollowsSequence)
 	uint8_t Output = 0x68;
 	MockMpu6050IO_ExpectReadAndReturn(0x75,1,&Output);
 
-	TEST_ASSERT_EQUAL_UINT8(0x68,Mpu6050Flex_WhoAmI());
+	TEST_ASSERT_EQUAL_UINT8(0x68,Mpu6050Flex_WhoAmI(Mpu6050));
 }
 /**
  * @brief Tests that Mpu6050Flex_ConfigSampleRateDivider follows correct sequence of interactions with the mpu6050 device
@@ -256,7 +264,7 @@ TEST(Mpu6050Tests,ConfigureSampleRateDividerFollowsSequence)
 
 	MockMpu6050IO_ExpectWrite(0x19,1,&Input);
 
-	TEST_ASSERT_EQUAL(MPU6050FLEX_SUCCESS,Mpu6050Flex_ConfigSampleRateDivider(0x00));
+	TEST_ASSERT_EQUAL(MPU6050FLEX_SUCCESS,Mpu6050Flex_ConfigSampleRateDivider(Mpu6050,0x00));
 }
 /**
  * @brief Tests that Mpu6050Flex_DigitalLowPassFilter follows correct sequence of interactions with the mpu6050 device
@@ -272,14 +280,14 @@ TEST(Mpu6050Tests,ConfigureDigitalLowPassFilterFollowsSequenceAndDoesntOverwrite
 
 	SetupParameterUpdateExpectations(ExpReadValue,ParamMask,ConfigOption,ParamReg);
 
-	TEST_ASSERT_EQUAL(MPU6050FLEX_SUCCESS,Mpu6050Flex_ConfigDigitalLowPassFilter(MPU6050FLEX_DLPF_CFG2));
+	TEST_ASSERT_EQUAL(MPU6050FLEX_SUCCESS,Mpu6050Flex_ConfigDigitalLowPassFilter(Mpu6050,MPU6050FLEX_DLPF_CFG2));
 }
 /**
  * @brief Tests that using Mpu6050Flex_ConfigDigitalLowPassFilter with bad arguments return an error status
  */
 TEST(Mpu6050Tests,ConfigureDigitalLowPassFilterRejectsBadArgs)
 {
-	TEST_ASSERT_EQUAL(MPU6050FLEX_FAILURE,Mpu6050Flex_ConfigDigitalLowPassFilter(0x10));
+	TEST_ASSERT_EQUAL(MPU6050FLEX_FAILURE,Mpu6050Flex_ConfigDigitalLowPassFilter(Mpu6050,0x10));
 }
 /**
  * @brief Tests that Mpu6050Flex_ConfigureGyroFullScaleRange follows correct sequence of interactions with the mpu6050 device
@@ -294,15 +302,15 @@ TEST(Mpu6050Tests,ConfigureGyroFullScaleRangeFollowsSequenceAndDoesntOverwrite)
 
 	SetupParameterUpdateExpectations(ExpReadValue,ParamMask,ConfigOption,ParamReg);
 
-	TEST_ASSERT_EQUAL(MPU6050FLEX_SUCCESS,Mpu6050Flex_ConfigGyroFullScaleRange(MPU6050FLEX_GYRO_FS_SEL_500));
-	TEST_ASSERT_EQUAL(66,Mpu6050Flex_GetGyroScale());
+	TEST_ASSERT_EQUAL(MPU6050FLEX_SUCCESS,Mpu6050Flex_ConfigGyroFullScaleRange(Mpu6050,MPU6050FLEX_GYRO_FS_SEL_500));
+	TEST_ASSERT_EQUAL(66,Mpu6050Flex_GetGyroScale(Mpu6050));
 }
 /**
  * @brief Tests that using Mpu6050Flex_ConfigGyroFullScaleRange with bad arguments return an error status
  */
 TEST(Mpu6050Tests,ConfigureGyroFullScaleRangeRejectsBadArgs)
 {
-	TEST_ASSERT_EQUAL(MPU6050FLEX_FAILURE,Mpu6050Flex_ConfigGyroFullScaleRange(0x20));
+	TEST_ASSERT_EQUAL(MPU6050FLEX_FAILURE,Mpu6050Flex_ConfigGyroFullScaleRange(Mpu6050,0x20));
 }
 /**
  * @brief Tests that Mpu6050Flex_ConfigureAccFullScaleRange follows correct sequence of interactions with the mpu6050 device
@@ -317,15 +325,15 @@ TEST(Mpu6050Tests,ConfigureAccFullScaleRangeFollowsSequenceAndDoesntOverwrite)
 
 	SetupParameterUpdateExpectations(ExpReadValue,ParamMask,ConfigOption,ParamReg);
 
-	TEST_ASSERT_EQUAL(MPU6050FLEX_SUCCESS,Mpu6050Flex_ConfigAccFullScaleRange(MPU6050FLEX_ACC_FS_SEL_8));
-	TEST_ASSERT_EQUAL(4096,Mpu6050Flex_GetAccScale());
+	TEST_ASSERT_EQUAL(MPU6050FLEX_SUCCESS,Mpu6050Flex_ConfigAccFullScaleRange(Mpu6050,MPU6050FLEX_ACC_FS_SEL_8));
+	TEST_ASSERT_EQUAL(4096,Mpu6050Flex_GetAccScale(Mpu6050));
 }
 /**
  * @brief Tests that using Mpu6050Flex_ConfigAccFullScaleRange with bad arguments return an error status
  */
 TEST(Mpu6050Tests,ConfigureAccFullScaleRangeRejectsBadArgs)
 {
-	TEST_ASSERT_EQUAL(MPU6050FLEX_FAILURE,Mpu6050Flex_ConfigAccFullScaleRange(0x20));
+	TEST_ASSERT_EQUAL(MPU6050FLEX_FAILURE,Mpu6050Flex_ConfigAccFullScaleRange(Mpu6050,0x20));
 }
 /**
  * @brief Tests that Mpu6050Flex_GetRawAccelData follows correct sequence of interactions with the mpu6050 device
@@ -337,7 +345,7 @@ TEST(Mpu6050Tests,GetRawAccDataFollowsCorrectOrderAndReturnsExpectedData)
 	Mpu6050Flex_ImuData_t ActualAccData;
 
 	SetupDataFunctionExpectations(&ExpectedAccData,0x3B);
-	ActualAccData = Mpu6050Flex_GetRawAccelData();
+	ActualAccData = Mpu6050Flex_GetRawAccelData(Mpu6050);
 
 	TEST_ASSERT(CompareDataStructs(&ExpectedAccData,&ActualAccData));
 }
@@ -351,7 +359,7 @@ TEST(Mpu6050Tests,GetRawGyroDataFollowsCorrectOrderAndReturnsExpectedData)
 	Mpu6050Flex_ImuData_t ActualGyroData;
 
 	SetupDataFunctionExpectations(&ExpectedGyroData,0x43);
-	ActualGyroData = Mpu6050Flex_GetRawGyroData();
+	ActualGyroData = Mpu6050Flex_GetRawGyroData(Mpu6050);
 
 	TEST_ASSERT(CompareDataStructs(&ExpectedGyroData,&ActualGyroData));
 }
@@ -364,9 +372,9 @@ TEST(Mpu6050Tests,SetupComplementaryFilterSetsCF)
 	float TestGyroCoeff = 0.98;
 	float TestAccCoeff = 0.02;
 
-	TEST_ASSERT_EQUAL(MPU6050FLEX_SUCCESS,Mpu6050Flex_SetComplementaryFilterCoeffs(TestGyroCoeff, TestAccCoeff));
-	TEST_ASSERT_EQUAL_FLOAT(TestGyroCoeff,Mpu6050Flex_GetGyroCFCoeff());
-	TEST_ASSERT_EQUAL_FLOAT(TestAccCoeff,Mpu6050Flex_GetAccCFCoeff());
+	TEST_ASSERT_EQUAL(MPU6050FLEX_SUCCESS,Mpu6050Flex_SetComplementaryFilterCoeffs(Mpu6050,TestGyroCoeff, TestAccCoeff));
+	TEST_ASSERT_EQUAL_FLOAT(TestGyroCoeff,Mpu6050Flex_GetGyroCFCoeff(Mpu6050));
+	TEST_ASSERT_EQUAL_FLOAT(TestAccCoeff,Mpu6050Flex_GetAccCFCoeff(Mpu6050));
 }
 /**
  * @brief Tests that using Mpu6050Flex_SetComplementaryFilterCoeffs with bad arguments return an error status
@@ -376,7 +384,7 @@ TEST(Mpu6050Tests,SetupComplementaryRejectsBadArgs)
 	float TestGyroCoeff = 0.91;
 	float TestAccCoeff = 0.12;
 
-	TEST_ASSERT_EQUAL(MPU6050FLEX_FAILURE,Mpu6050Flex_SetComplementaryFilterCoeffs(TestGyroCoeff, TestAccCoeff));
+	TEST_ASSERT_EQUAL(MPU6050FLEX_FAILURE,Mpu6050Flex_SetComplementaryFilterCoeffs(Mpu6050,TestGyroCoeff, TestAccCoeff));
 }
 /**
  * @brief Tests that Mpu6050Flex_Sleep follows correct sequence of interactions with the mpu6050 device
@@ -392,7 +400,7 @@ TEST(Mpu6050Tests,SleepFollowsSequenceAndDoesntOverwrite)
 
 	SetupParameterUpdateExpectations(ExpReadValue,ParamMask,ConfigOption,ParamReg);
 
-	TEST_ASSERT_EQUAL(MPU6050FLEX_SUCCESS,Mpu6050Flex_Sleep());
+	TEST_ASSERT_EQUAL(MPU6050FLEX_SUCCESS,Mpu6050Flex_Sleep(Mpu6050));
 }
 /**
  * @brief Tests that Mpu6050Flex_WakeUp follows correct sequence of interactions with the mpu6050 device
@@ -408,7 +416,7 @@ TEST(Mpu6050Tests,WakeUpFollowsSequenceAndDoesntOverwrite)
 
 	SetupParameterUpdateExpectations(ExpReadValue,ParamMask,ConfigOption,ParamReg);
 
-	TEST_ASSERT_EQUAL(MPU6050FLEX_SUCCESS,Mpu6050Flex_WakeUp());
+	TEST_ASSERT_EQUAL(MPU6050FLEX_SUCCESS,Mpu6050Flex_WakeUp(Mpu6050));
 }
 
 //------------------------------------------------------------------------------------
@@ -421,13 +429,15 @@ TEST_GROUP(Mpu6050CalibratedTests);
 TEST_SETUP(Mpu6050CalibratedTests)
 {
 	MockMpu6050IO_Create(20);
-	Mpu6050Flex_SetIORead(MockMpu6050IO_ReadAndReturn);
-	Mpu6050Flex_SetIOWrite(MockMpu6050IO_Write);
-	Mpu6050Flex_SetDelay(MockMpu6050_Delay);
-	Mpu6050Flex_SetGetMs(MockMpu6050_GetMs);
+	Mpu6050 = Mpu6050Flex_Create();
+
+	Mpu6050Flex_SetIORead(Mpu6050,MockMpu6050IO_ReadAndReturn);
+	Mpu6050Flex_SetIOWrite(Mpu6050,MockMpu6050IO_Write);
+	Mpu6050Flex_SetDelay(Mpu6050,MockMpu6050_Delay);
+	Mpu6050Flex_SetGetMs(Mpu6050,MockMpu6050_GetMs);
 
 	SetupCalibrationExpectations();
-	Mpu6050Flex_Calibrate();
+	Mpu6050Flex_Calibrate(Mpu6050);
 
 }
 
@@ -435,6 +445,7 @@ TEST_TEAR_DOWN(Mpu6050CalibratedTests)
 {
 	MockMpu6050IO_VerifyComplete();
 	MockMpu6050IO_Destroy();
+	Mpu6050Flex_Destroy(Mpu6050);
 }
 
 /**
@@ -456,7 +467,7 @@ TEST(Mpu6050CalibratedTests,CalibrateWritesAverageReadDataInInternalStructure)
 		.AccData.DataZ 		= CalibOffsetData[5],
 	};
 
-	ActualDataStruct = Mpu6050Flex_GetImuDataOffsets();
+	ActualDataStruct = Mpu6050Flex_GetImuDataOffsets(Mpu6050);
 
 	TEST_ASSERT(CompareDataStructs(&ExpectedDataStruct.GyroData,&ActualDataStruct.GyroData));
 	TEST_ASSERT(CompareDataStructs(&ExpectedDataStruct.AccData,&ActualDataStruct.AccData));
@@ -468,7 +479,7 @@ TEST(Mpu6050CalibratedTests,CalibrateWritesAverageReadDataInInternalStructure)
  */
 TEST(Mpu6050CalibratedTests,CalibrateSetsLastGyroReadTime)
 {
-	TEST_ASSERT_EQUAL(25,Mpu6050Flex_GetLastGyroReadTime());
+	TEST_ASSERT_EQUAL(25,Mpu6050Flex_GetLastGyroReadTime(Mpu6050));
 }
 
 /**
@@ -482,7 +493,7 @@ TEST(Mpu6050CalibratedTests,GetGyroDataFollowsCorrectOrderAndReturnsExpectedData
 
 	SetupCalibratedDataFunctionExpectations(&ExpectedGyroData,0x43);
 
-	ActualGyroData = Mpu6050Flex_GetGyroData();
+	ActualGyroData = Mpu6050Flex_GetGyroData(Mpu6050);
 
 	printf("Output Gyro Data: [0x%.4x][0x%.4x][0x%.4x]\n",ActualGyroData.DataX,ActualGyroData.DataY,ActualGyroData.DataZ);
 	TEST_ASSERT(CompareDataStructs(&ExpectedGyroData,&ActualGyroData));
@@ -499,7 +510,7 @@ TEST(Mpu6050CalibratedTests,GetAccDataFollowsCorrectOrderAndReturnsExpectedData)
 
 	SetupCalibratedDataFunctionExpectations(&ExpectedAccData,0x3B);
 
-	ActualAccData = Mpu6050Flex_GetAccelData();
+	ActualAccData = Mpu6050Flex_GetAccelData(Mpu6050);
 
 	printf("Output Acc Data: [0x%.4x][0x%.4x][0x%.4x]\n",ActualAccData.DataX,ActualAccData.DataY,ActualAccData.DataZ);
 	TEST_ASSERT(CompareDataStructs(&ExpectedAccData,&ActualAccData));
@@ -517,7 +528,6 @@ TEST(Mpu6050CalibratedTests,GetEulerFollowsCorrectOrderAndReturnsExpectedData)
 	//test that returned euler angles are correct for data out set in the beginning of this file
 	//considering last gyro time and last known attitude are set during calibration
 
-	TEST_ASSERT(0);
 }
 
 //TEST: get euler sets last known attitude and last gyro read time

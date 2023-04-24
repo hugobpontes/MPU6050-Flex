@@ -11,6 +11,7 @@ TEST_GROUP_RUNNER(Mpu6050SetupTests)
 
 TEST_GROUP_RUNNER(Mpu6050Tests)
 {
+
   RUN_TEST_CASE(Mpu6050Tests, ReadWhoAmIFollowsSequence);
   RUN_TEST_CASE(Mpu6050Tests, ConfigureSampleRateDividerFollowsSequence);
   RUN_TEST_CASE(Mpu6050Tests, ConfigureDigitalLowPassFilterFollowsSequenceAndDoesntOverwrite);

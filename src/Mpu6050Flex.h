@@ -169,33 +169,38 @@ typedef struct Mpu6050Flex_EulerAngles
 	float Yaw;
 }Mpu6050Flex_EulerAngles_t;
 
-void Mpu6050Flex_SetIOWrite(IOFunc_t pWriteFunc);
-void Mpu6050Flex_SetIORead(IOFunc_t pReadFunc);
-void Mpu6050Flex_SetDelay(DelayFunc_t pDelay);
-void Mpu6050Flex_SetGetMs(GetMsFunc_t pGetMs);
-IOFunc_t Mpu6050Flex_GetIOWrite();
-IOFunc_t Mpu6050Flex_GetIORead();
-DelayFunc_t Mpu6050Flex_GetDelay();
-GetMsFunc_t Mpu6050Flex_GetGetMs();
-uint8_t Mpu6050Flex_WhoAmI();
-MPU6050Flex_Status_t Mpu6050Flex_ConfigSampleRateDivider(uint8_t Division);
-MPU6050Flex_Status_t Mpu6050Flex_ConfigDigitalLowPassFilter(MPU6050Flex_DLPF_Options_t ConfigOption);
-MPU6050Flex_Status_t Mpu6050Flex_ConfigGyroFullScaleRange(MPU6050Flex_GYRO_FS_SEL_Options_t ConfigOption);
-MPU6050Flex_Status_t Mpu6050Flex_ConfigAccFullScaleRange(MPU6050Flex_ACC_FS_SEL_Options_t ConfigOption);
-Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawAccelData();
-Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawGyroData();
-Mpu6050Flex_FullImuData_t Mpu6050Flex_GetImuDataOffsets();
-MPU6050Flex_Status_t Mpu6050Flex_Calibrate();
-Mpu6050Flex_ImuData_t Mpu6050Flex_GetAccelData();
-Mpu6050Flex_ImuData_t Mpu6050Flex_GetGyroData();
-int16_t Mpu6050Flex_GetGyroScale();
-int16_t Mpu6050Flex_GetAccScale();
-MPU6050Flex_Status_t Mpu6050Flex_SetComplementaryFilterCoeffs(float GyroCoeff, float AccCoeff);
-float Mpu6050Flex_GetGyroCFCoeff();
-float Mpu6050Flex_GetAccCFCoeff();
-MPU6050Flex_Status_t Mpu6050Flex_Sleep();
-MPU6050Flex_Status_t Mpu6050Flex_WakeUp();
-uint32_t Mpu6050Flex_GetLastGyroReadTime();
+
+typedef struct Mpu6050FlexStruct* Mpu6050Flex_t;
+
+Mpu6050Flex_t Mpu6050Flex_Create();
+void Mpu6050Flex_Destroy(Mpu6050Flex_t Mpu6050Flex);
+void Mpu6050Flex_SetIOWrite(Mpu6050Flex_t Mpu6050Flex,IOFunc_t pWriteFunc);
+void Mpu6050Flex_SetIORead(Mpu6050Flex_t Mpu6050Flex,IOFunc_t pReadFunc);
+void Mpu6050Flex_SetDelay(Mpu6050Flex_t Mpu6050Flex,DelayFunc_t pDelay);
+void Mpu6050Flex_SetGetMs(Mpu6050Flex_t Mpu6050Flex,GetMsFunc_t pGetMs);
+IOFunc_t Mpu6050Flex_GetIOWrite(Mpu6050Flex_t Mpu6050Flex);
+IOFunc_t Mpu6050Flex_GetIORead(Mpu6050Flex_t Mpu6050Flex);
+DelayFunc_t Mpu6050Flex_GetDelay(Mpu6050Flex_t Mpu6050Flex);
+GetMsFunc_t Mpu6050Flex_GetGetMs(Mpu6050Flex_t Mpu6050Flex);
+uint8_t Mpu6050Flex_WhoAmI(Mpu6050Flex_t Mpu6050Flex);
+MPU6050Flex_Status_t Mpu6050Flex_ConfigSampleRateDivider(Mpu6050Flex_t Mpu6050Flex,uint8_t Division);
+MPU6050Flex_Status_t Mpu6050Flex_ConfigDigitalLowPassFilter(Mpu6050Flex_t Mpu6050Flex,MPU6050Flex_DLPF_Options_t ConfigOption);
+MPU6050Flex_Status_t Mpu6050Flex_ConfigGyroFullScaleRange(Mpu6050Flex_t Mpu6050Flex,MPU6050Flex_GYRO_FS_SEL_Options_t ConfigOption);
+MPU6050Flex_Status_t Mpu6050Flex_ConfigAccFullScaleRange(Mpu6050Flex_t Mpu6050Flex,MPU6050Flex_ACC_FS_SEL_Options_t ConfigOption);
+Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawAccelData(Mpu6050Flex_t Mpu6050Flex);
+Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawGyroData(Mpu6050Flex_t Mpu6050Flex);
+Mpu6050Flex_FullImuData_t Mpu6050Flex_GetImuDataOffsets(Mpu6050Flex_t Mpu6050Flex);
+MPU6050Flex_Status_t Mpu6050Flex_Calibrate(Mpu6050Flex_t Mpu6050Flex);
+Mpu6050Flex_ImuData_t Mpu6050Flex_GetAccelData(Mpu6050Flex_t Mpu6050Flex);
+Mpu6050Flex_ImuData_t Mpu6050Flex_GetGyroData(Mpu6050Flex_t Mpu6050Flex);
+int16_t Mpu6050Flex_GetGyroScale(Mpu6050Flex_t Mpu6050Flex);
+int16_t Mpu6050Flex_GetAccScale(Mpu6050Flex_t Mpu6050Flex);
+MPU6050Flex_Status_t Mpu6050Flex_SetComplementaryFilterCoeffs(Mpu6050Flex_t Mpu6050Flex,float GyroCoeff, float AccCoeff);
+float Mpu6050Flex_GetGyroCFCoeff(Mpu6050Flex_t Mpu6050Flex);
+float Mpu6050Flex_GetAccCFCoeff(Mpu6050Flex_t Mpu6050Flex);
+MPU6050Flex_Status_t Mpu6050Flex_Sleep(Mpu6050Flex_t Mpu6050Flex);
+MPU6050Flex_Status_t Mpu6050Flex_WakeUp(Mpu6050Flex_t Mpu6050Flex);
+uint32_t Mpu6050Flex_GetLastGyroReadTime(Mpu6050Flex_t Mpu6050Flex);
 
 #endif /* MPU6050FLEX_H_ */
 

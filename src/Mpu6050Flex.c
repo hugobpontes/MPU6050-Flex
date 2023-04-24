@@ -12,11 +12,12 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stddef.h>
+#include <stdlib.h>
 /**
  * @brief Type representing a structure containing all configurable parameters in the Mpu6050 library.
  *
  */
-typedef struct Mpu6050ConfigStruct
+typedef struct Mpu6050FlexStruct
 {
 	IOFunc_t pIOWrite; /**< Pointer to the function used to write bytes to the mpu6050 registers */
 	IOFunc_t pIORead;  /**< Pointer to the function used to read bytes from the mpu6050 registers */
@@ -26,7 +27,9 @@ typedef struct Mpu6050ConfigStruct
 	int16_t GyroScale;
 	float AccCFCoefficient; /**< Complimentary filter coefficient corresponding to the accelerometer readings */
 	float GyroCFCoefficient; /**< Complimentary filter coefficient corresponding to the gyro readings */
-} Mpu6050Flex_Config_t;
+	Mpu6050Flex_FullImuData_t Mpu6050ImuDataOffset;
+	uint32_t LastGyroReadTime;
+} Mpu6050FlexStruct_t;
 
 #define CALIBRATION_DURATION 3000 		/**< Duration of calibration period */
 #define CALIBRATION_ITERATIONS_PO2 2	/**< Number to which 2 is raised to indicate nmbr of samples to be taken within calibration sec */
@@ -44,42 +47,36 @@ typedef struct Mpu6050ConfigStruct
 #define SCALE_MPU6050FLEX_ACC_FS_SEL_16		2048 //~(((1<<16)-1)/32)
 
 /*Static function declarations*/
-static MPU6050Flex_Status_t Mpu6050Flex_ReplaceRegisterSegment(uint8_t Register,uint8_t SegmentMask, uint8_t Value);
-static MPU6050Flex_Status_t Mpu6050Flex_WriteFullRegister(uint8_t Register, uint8_t Value);
+static MPU6050Flex_Status_t Mpu6050Flex_ReplaceRegisterSegment(Mpu6050Flex_t Mpu6050Flex,uint8_t Register,uint8_t SegmentMask, uint8_t Value);
+static MPU6050Flex_Status_t Mpu6050Flex_WriteFullRegister(Mpu6050Flex_t Mpu6050Flex,uint8_t Register, uint8_t Value);
 static bool Mpu6050Flex_ValueFitsInMask(uint8_t Option, uint8_t Mask);
-static MPU6050Flex_Status_t Mpu6050Flex_UpdateParameter(uint8_t ParameterValue, uint8_t ParameterMask, uint8_t RegisterAddress);
+static MPU6050Flex_Status_t Mpu6050Flex_UpdateParameter(Mpu6050Flex_t Mpu6050Flex,uint8_t ParameterValue, uint8_t ParameterMask, uint8_t RegisterAddress);
 static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuData32_t* pDest, Mpu6050Flex_ImuData_t* pAccData, Mpu6050Flex_ImuData_t* pGyroData);
 static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuData_t* pDest, Mpu6050Flex_FullImuData32_t* pOrig, uint8_t RightShift);
 static void Mpu6050Flex_SubtractImuDataStruct(Mpu6050Flex_ImuData_t* pA, Mpu6050Flex_ImuData_t* pB);
 
-/**
- * @brief Calibration offsets struct used for the imu data readings
- */
-static Mpu6050Flex_FullImuData_t Mpu6050ImuDataOffset = {0};
-/**
- * @brief Variable used to keep track of the last time a
- * gyro measurement was used to compute attitude. Is initially set during calibration
- */
-static uint32_t LastGyroReadTime = 0;
-/**
- * @brief Mpu6050 Configuration struct
- */
-static Mpu6050Flex_Config_t Mpu6050Config =
+Mpu6050Flex_t Mpu6050Flex_Create()
 {
-	.pIORead = NULL,
-	.pIOWrite = NULL,
-	.pDelay = NULL,
-	.AccScale = 	SCALE_MPU6050FLEX_ACC_FS_SEL_2,
-	.GyroScale = 	SCALE_MPU6050FLEX_GYRO_FS_SEL_250,
-};
+	Mpu6050Flex_t Mpu6050Flex;
+	Mpu6050Flex = (Mpu6050Flex_t) malloc(sizeof(Mpu6050FlexStruct_t));
+
+	return Mpu6050Flex;
+}
+
+void Mpu6050Flex_Destroy(Mpu6050Flex_t Mpu6050Flex)
+{
+	free(Mpu6050Flex);
+}
+
+
 /**
  * @brief Gets the time (in ms since program start) of the last gyro measurement used for attitude computation
  *
  * @return time of the last gyro measurement used for attitude computation
  */
-uint32_t Mpu6050Flex_GetLastGyroReadTime()
+uint32_t Mpu6050Flex_GetLastGyroReadTime(Mpu6050Flex_t Mpu6050Flex)
 {
-	return LastGyroReadTime;
+	return Mpu6050Flex->LastGyroReadTime;
 }
 
 /**
@@ -87,36 +84,36 @@ uint32_t Mpu6050Flex_GetLastGyroReadTime()
  *
  * @param pWriteFunc: Function Pointer that points to the IO Write function to use
  */
-void Mpu6050Flex_SetIOWrite(IOFunc_t pWriteFunc)
+void Mpu6050Flex_SetIOWrite(Mpu6050Flex_t Mpu6050Flex, IOFunc_t pWriteFunc)
 {
-	Mpu6050Config.pIOWrite = pWriteFunc;
+	Mpu6050Flex->pIOWrite = pWriteFunc;
 }
 /**
  * @brief Injects the IO Read function that this library uses
  *
  * @param pWriteFunc Function Pointer that points to the IO Read function to use
  */
-void Mpu6050Flex_SetIORead(IOFunc_t pReadFunc)
+void Mpu6050Flex_SetIORead(Mpu6050Flex_t Mpu6050Flex, IOFunc_t pReadFunc)
 {
-	Mpu6050Config.pIORead = pReadFunc;
+	Mpu6050Flex->pIORead = pReadFunc;
 }
 /**
  * @brief Injects the Delay in ms function that this library uses
  *
  * @param pDelay Function Pointer that points to the delay function to use
  */
-void Mpu6050Flex_SetDelay(DelayFunc_t pDelay)
+void Mpu6050Flex_SetDelay(Mpu6050Flex_t Mpu6050Flex, DelayFunc_t pDelay)
 {
-	Mpu6050Config.pDelay = pDelay;
+	Mpu6050Flex->pDelay = pDelay;
 }
 /**
  * @brief Injects the get milliseconds since program start function that this library uses
  *
  * @param pGetMsFunction Pointer that points to the get milliseconds since program start function to use
  */
-void Mpu6050Flex_SetGetMs(GetMsFunc_t pGetMs)
+void Mpu6050Flex_SetGetMs(Mpu6050Flex_t Mpu6050Flex, GetMsFunc_t pGetMs)
 {
-	Mpu6050Config.pGetMs = pGetMs;
+	Mpu6050Flex->pGetMs = pGetMs;
 }
 
 /**
@@ -124,36 +121,36 @@ void Mpu6050Flex_SetGetMs(GetMsFunc_t pGetMs)
  *
  * @return Pointer to the currently set IO write function pointer
  */
-IOFunc_t Mpu6050Flex_GetIOWrite()
+IOFunc_t Mpu6050Flex_GetIOWrite(Mpu6050Flex_t Mpu6050Flex)
 {
-	return Mpu6050Config.pIOWrite;
+	return Mpu6050Flex->pIOWrite;
 }
 /**
  * @brief Gets a pointer to the currently set IO read function pointer
  *
  * @return Pointer to the currently set IO read function pointer
  */
-IOFunc_t Mpu6050Flex_GetIORead()
+IOFunc_t Mpu6050Flex_GetIORead(Mpu6050Flex_t Mpu6050Flex)
 {
-	return Mpu6050Config.pIORead;
+	return Mpu6050Flex->pIORead;
 }
 /**
  * @brief Gets a pointer to the currently set delay in ms function pointer
  *
  * @return Pointer to the currently set delay function pointer
  */
-DelayFunc_t Mpu6050Flex_GetDelay()
+DelayFunc_t Mpu6050Flex_GetDelay(Mpu6050Flex_t Mpu6050Flex)
 {
-	return Mpu6050Config.pDelay;
+	return Mpu6050Flex->pDelay;
 }
 /**
  * @brief Gets a pointer to the currently set get milliseconds function pointer
  *
  * @return Pointer to the currently set get milliseconds function pointer
  */
-GetMsFunc_t Mpu6050Flex_GetGetMs()
+GetMsFunc_t Mpu6050Flex_GetGetMs(Mpu6050Flex_t Mpu6050Flex)
 {
-	return Mpu6050Config.pGetMs;
+	return Mpu6050Flex->pGetMs;
 }
 /**
  * @brief Gets the currently set accelerometer scale.
@@ -161,9 +158,9 @@ GetMsFunc_t Mpu6050Flex_GetGetMs()
  *
  * @return currently set accelerometer scale.
  */
-int16_t Mpu6050Flex_GetAccScale()
+int16_t Mpu6050Flex_GetAccScale(Mpu6050Flex_t Mpu6050Flex)
 {
-	return Mpu6050Config.AccScale;
+	return Mpu6050Flex->AccScale;
 }
 /**
  * @brief Gets the currently set gyro scale.
@@ -171,9 +168,9 @@ int16_t Mpu6050Flex_GetAccScale()
  *
  * @return currently set gyro scale.
  */
-int16_t Mpu6050Flex_GetGyroScale()
+int16_t Mpu6050Flex_GetGyroScale(Mpu6050Flex_t Mpu6050Flex)
 {
-	return Mpu6050Config.GyroScale;
+	return Mpu6050Flex->GyroScale;
 }
 /**
  * @brief Sets the gyro and accelerometer coefficients of the used complementary filter
@@ -183,14 +180,14 @@ int16_t Mpu6050Flex_GetGyroScale()
  *
  * @return Status code to access operation success
  */
-MPU6050Flex_Status_t Mpu6050Flex_SetComplementaryFilterCoeffs(float GyroCoeff, float AccCoeff)
+MPU6050Flex_Status_t Mpu6050Flex_SetComplementaryFilterCoeffs(Mpu6050Flex_t Mpu6050Flex,float GyroCoeff, float AccCoeff)
 {
 	MPU6050Flex_Status_t Status = MPU6050FLEX_SUCCESS;
 	float sum = GyroCoeff + AccCoeff;
 	if ((GyroCoeff > 0) && (AccCoeff > 0) && (sum == 1.0))
 	{
-		Mpu6050Config.AccCFCoefficient = AccCoeff;
-		Mpu6050Config.GyroCFCoefficient = GyroCoeff;
+		Mpu6050Flex->AccCFCoefficient = AccCoeff;
+		Mpu6050Flex->GyroCFCoefficient = GyroCoeff;
 	}
 	else
 	{
@@ -204,18 +201,18 @@ MPU6050Flex_Status_t Mpu6050Flex_SetComplementaryFilterCoeffs(float GyroCoeff, f
  *
  * @return currently set gyro complementary filter coefficient.
  */
-float Mpu6050Flex_GetGyroCFCoeff()
+float Mpu6050Flex_GetGyroCFCoeff(Mpu6050Flex_t Mpu6050Flex)
 {
-	return Mpu6050Config.GyroCFCoefficient;
+	return Mpu6050Flex->GyroCFCoefficient;
 }
 /**
  * @brief Gets the currently set accelerometer complementary filter coefficient
  *
  * @return currently set accelerometer complementary filter coefficient.
  */
-float Mpu6050Flex_GetAccCFCoeff()
+float Mpu6050Flex_GetAccCFCoeff(Mpu6050Flex_t Mpu6050Flex)
 {
-	return Mpu6050Config.AccCFCoefficient;
+	return Mpu6050Flex->AccCFCoefficient;
 }
 
 /**
@@ -223,13 +220,13 @@ float Mpu6050Flex_GetAccCFCoeff()
  *
  * @return I2C Address of the MPU6050 or 0xFF if it wasnt possible to obtain a valid address
  */
-uint8_t Mpu6050Flex_WhoAmI()
+uint8_t Mpu6050Flex_WhoAmI(Mpu6050Flex_t Mpu6050Flex)
 {
 	uint8_t Mpu6050Address = 0xFF;
 
-	if (Mpu6050Config.pIORead)
+	if (Mpu6050Flex->pIORead)
 	{
-		if (Mpu6050Config.pIORead(REG_WHO_AM_I,1,&Mpu6050Address) != IO_SUCCESS)
+		if (Mpu6050Flex->pIORead(REG_WHO_AM_I,1,&Mpu6050Address) != IO_SUCCESS)
 		{
 			Mpu6050Address = 0xFF;
 		}
@@ -244,11 +241,11 @@ uint8_t Mpu6050Flex_WhoAmI()
  *
  * @return Status code to access operation success
  */
-MPU6050Flex_Status_t Mpu6050Flex_ConfigSampleRateDivider(uint8_t Division)
+MPU6050Flex_Status_t Mpu6050Flex_ConfigSampleRateDivider(Mpu6050Flex_t Mpu6050Flex, uint8_t Division)
 {
 	MPU6050Flex_Status_t Status;
 
-	Status = Mpu6050Flex_UpdateParameter(Division,MPU6050FLEX_SMPLRT_DIV_MSK,REG_SMPRT_DIV);
+	Status = Mpu6050Flex_UpdateParameter(Mpu6050Flex,Division,MPU6050FLEX_SMPLRT_DIV_MSK,REG_SMPRT_DIV);
 
 	return Status;
 }
@@ -261,11 +258,11 @@ MPU6050Flex_Status_t Mpu6050Flex_ConfigSampleRateDivider(uint8_t Division)
  *
  * @return Status code to access operation success
  */
-MPU6050Flex_Status_t Mpu6050Flex_ConfigDigitalLowPassFilter(MPU6050Flex_DLPF_Options_t ConfigOption)
+MPU6050Flex_Status_t Mpu6050Flex_ConfigDigitalLowPassFilter(Mpu6050Flex_t Mpu6050Flex, MPU6050Flex_DLPF_Options_t ConfigOption)
 {
 	MPU6050Flex_Status_t Status;
 
-	Status = Mpu6050Flex_UpdateParameter(ConfigOption,MPU6050FLEX_DLPF_CFG_MSK,REG_CONFIG);
+	Status = Mpu6050Flex_UpdateParameter(Mpu6050Flex,ConfigOption,MPU6050FLEX_DLPF_CFG_MSK,REG_CONFIG);
 
 	return Status;
 }
@@ -282,27 +279,27 @@ MPU6050Flex_Status_t Mpu6050Flex_ConfigDigitalLowPassFilter(MPU6050Flex_DLPF_Opt
  *
  * @return Status code to access operation success
  */
-MPU6050Flex_Status_t Mpu6050Flex_ConfigGyroFullScaleRange(MPU6050Flex_GYRO_FS_SEL_Options_t ConfigOption)
+MPU6050Flex_Status_t Mpu6050Flex_ConfigGyroFullScaleRange(Mpu6050Flex_t Mpu6050Flex, MPU6050Flex_GYRO_FS_SEL_Options_t ConfigOption)
 {
 	MPU6050Flex_Status_t Status;
 
-	Status = Mpu6050Flex_UpdateParameter(ConfigOption,MPU6050FLEX_FS_SEL_MSK,REG_GYRO_CONFIG);
+	Status = Mpu6050Flex_UpdateParameter(Mpu6050Flex,ConfigOption,MPU6050FLEX_FS_SEL_MSK,REG_GYRO_CONFIG);
 
 	if (Status == MPU6050FLEX_SUCCESS)
 	{
 		switch (ConfigOption)
 		{
 		case MPU6050FLEX_GYRO_FS_SEL_250:
-			Mpu6050Config.GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_250;
+			Mpu6050Flex->GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_250;
 			break;
 		case MPU6050FLEX_GYRO_FS_SEL_500:
-			Mpu6050Config.GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_500;
+			Mpu6050Flex->GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_500;
 			break;
 		case MPU6050FLEX_GYRO_FS_SEL_1000:
-			Mpu6050Config.GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_1000;
+			Mpu6050Flex->GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_1000;
 			break;
 		case MPU6050FLEX_GYRO_FS_SEL_2000:
-			Mpu6050Config.GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_2000;
+			Mpu6050Flex->GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_2000;
 			break;
 		}
 	}
@@ -322,27 +319,27 @@ MPU6050Flex_Status_t Mpu6050Flex_ConfigGyroFullScaleRange(MPU6050Flex_GYRO_FS_SE
  *
  * @return Status code to access operation success
  */
-MPU6050Flex_Status_t Mpu6050Flex_ConfigAccFullScaleRange(MPU6050Flex_ACC_FS_SEL_Options_t ConfigOption)
+MPU6050Flex_Status_t Mpu6050Flex_ConfigAccFullScaleRange(Mpu6050Flex_t Mpu6050Flex, MPU6050Flex_ACC_FS_SEL_Options_t ConfigOption)
 {
 	MPU6050Flex_Status_t Status;
 
-	Status = Mpu6050Flex_UpdateParameter(ConfigOption,MPU6050FLEX_AFS_SEL_MSK,REG_ACCEL_CONFIG);
+	Status = Mpu6050Flex_UpdateParameter(Mpu6050Flex,ConfigOption,MPU6050FLEX_AFS_SEL_MSK,REG_ACCEL_CONFIG);
 
 	if (Status == MPU6050FLEX_SUCCESS)
 		{
 			switch (ConfigOption)
 			{
 			case MPU6050FLEX_ACC_FS_SEL_2:
-				Mpu6050Config.AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_2;
+				Mpu6050Flex->AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_2;
 				break;
 			case MPU6050FLEX_ACC_FS_SEL_4:
-				Mpu6050Config.AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_4;
+				Mpu6050Flex->AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_4;
 				break;
 			case MPU6050FLEX_ACC_FS_SEL_8:
-				Mpu6050Config.AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_8;
+				Mpu6050Flex->AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_8;
 				break;
 			case MPU6050FLEX_ACC_FS_SEL_16:
-				Mpu6050Config.AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_16;
+				Mpu6050Flex->AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_16;
 				break;
 			}
 		}
@@ -359,21 +356,21 @@ MPU6050Flex_Status_t Mpu6050Flex_ConfigAccFullScaleRange(MPU6050Flex_ACC_FS_SEL_
  *
  * @return Status code to access operation success
  */
-static MPU6050Flex_Status_t Mpu6050Flex_ReplaceRegisterSegment(uint8_t RegisterAddress,uint8_t SegmentMask, uint8_t Value)
+static MPU6050Flex_Status_t Mpu6050Flex_ReplaceRegisterSegment(Mpu6050Flex_t Mpu6050Flex, uint8_t RegisterAddress,uint8_t SegmentMask, uint8_t Value)
 {
 	uint8_t CurrentRegValue;
 	uint8_t WriteValue;
 
 	MPU6050Flex_Status_t Status = MPU6050FLEX_SUCCESS;
 
-	if (Mpu6050Config.pIORead && Mpu6050Config.pIOWrite)
+	if (Mpu6050Flex->pIORead && Mpu6050Flex->pIOWrite)
 	{
-		if (Mpu6050Config.pIORead(RegisterAddress,1,&CurrentRegValue) == IO_SUCCESS)
+		if (Mpu6050Flex->pIORead(RegisterAddress,1,&CurrentRegValue) == IO_SUCCESS)
 		{
 			/*Bitwise operation to remove current parameter value
 			 * from read byte and to replace it with value specified in function arguments*/
 			WriteValue = (CurrentRegValue & (~SegmentMask)) | Value;
-			if (Mpu6050Config.pIOWrite(RegisterAddress,1,&WriteValue) != IO_SUCCESS)
+			if (Mpu6050Flex->pIOWrite(RegisterAddress,1,&WriteValue) != IO_SUCCESS)
 			{
 				Status = MPU6050FLEX_FAILURE;
 			}
@@ -397,13 +394,13 @@ static MPU6050Flex_Status_t Mpu6050Flex_ReplaceRegisterSegment(uint8_t RegisterA
  *
  * @return Status code to access operation success
  */
-static MPU6050Flex_Status_t Mpu6050Flex_WriteFullRegister(uint8_t RegisterAddress, uint8_t Value)
+static MPU6050Flex_Status_t Mpu6050Flex_WriteFullRegister(Mpu6050Flex_t Mpu6050Flex, uint8_t RegisterAddress, uint8_t Value)
 {
 	MPU6050Flex_Status_t Status = MPU6050FLEX_SUCCESS;
 
-	if (Mpu6050Config.pIOWrite)
+	if (Mpu6050Flex->pIOWrite)
 	{
-		if (Mpu6050Config.pIOWrite(RegisterAddress,1,&Value) != IO_SUCCESS)
+		if (Mpu6050Flex->pIOWrite(RegisterAddress,1,&Value) != IO_SUCCESS)
 		{
 			Status = MPU6050FLEX_FAILURE;
 		}
@@ -437,7 +434,7 @@ static bool Mpu6050Flex_ValueFitsInMask(uint8_t Value, uint8_t Mask)
  *
  * @return Status code to access operation success
  */
-static MPU6050Flex_Status_t Mpu6050Flex_UpdateParameter(uint8_t ParameterValue, uint8_t ParameterMask, uint8_t RegisterAddress)
+static MPU6050Flex_Status_t Mpu6050Flex_UpdateParameter(Mpu6050Flex_t Mpu6050Flex, uint8_t ParameterValue, uint8_t ParameterMask, uint8_t RegisterAddress)
 {
 
 	MPU6050Flex_Status_t Status = MPU6050FLEX_SUCCESS;
@@ -447,7 +444,7 @@ static MPU6050Flex_Status_t Mpu6050Flex_UpdateParameter(uint8_t ParameterValue, 
 		/*If mask is 0xFF there is no need
 		 * to read the current register value, so that step is bypassed
 		 * in Mpu6050Flex_WriteFullRegister. */
-		Status = Mpu6050Flex_WriteFullRegister( RegisterAddress, ParameterValue);
+		Status = Mpu6050Flex_WriteFullRegister(Mpu6050Flex,RegisterAddress, ParameterValue);
 	}
 	else
 	{
@@ -455,7 +452,7 @@ static MPU6050Flex_Status_t Mpu6050Flex_UpdateParameter(uint8_t ParameterValue, 
 		 * so Mpu6050Flex_ReplaceRegisterSegment is called  */
 		if (Mpu6050Flex_ValueFitsInMask(ParameterValue,ParameterMask))
 		{
-			Status = Mpu6050Flex_ReplaceRegisterSegment(RegisterAddress,ParameterMask,ParameterValue);
+			Status = Mpu6050Flex_ReplaceRegisterSegment(Mpu6050Flex,RegisterAddress,ParameterMask,ParameterValue);
 		}
 		else
 		{
@@ -489,16 +486,16 @@ static bool Mpu6050Flex_IsValidImuDataRegister(uint8_t DataRegister)
  *
  * @return Struct containing imu data read or empty struct if any of the function steps fails
  */
-static Mpu6050Flex_ImuData_t Mpu6050Flex_GetImuData(uint8_t DataRegister)
+static Mpu6050Flex_ImuData_t Mpu6050Flex_GetImuData(Mpu6050Flex_t Mpu6050Flex, uint8_t DataRegister)
 {
 	uint8_t SerializedData[6];
 	Mpu6050Flex_ImuData_t ImuData = {0};
 
-	if (Mpu6050Config.pIORead)
+	if (Mpu6050Flex->pIORead)
 	{
 		if (Mpu6050Flex_IsValidImuDataRegister(DataRegister))
 		{
-			if (Mpu6050Config.pIORead(DataRegister,6,SerializedData) == IO_SUCCESS)
+			if (Mpu6050Flex->pIORead(DataRegister,6,SerializedData) == IO_SUCCESS)
 			{
 				/*Copy serialized bytes into struct */
 				memcpy(&(ImuData.DataX),SerializedData,2);
@@ -515,9 +512,9 @@ static Mpu6050Flex_ImuData_t Mpu6050Flex_GetImuData(uint8_t DataRegister)
  *
  * @return Struct containing raw acceleration imu data read or empty struct if any of the underlying function steps fails
  */
-Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawAccelData()
+Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawAccelData(Mpu6050Flex_t Mpu6050Flex)
 {
-	return Mpu6050Flex_GetImuData(REG_ACCEL_XOUT_H);
+	return Mpu6050Flex_GetImuData(Mpu6050Flex,REG_ACCEL_XOUT_H);
 }
 /**
  * @brief Reads 6 bytes of accelerometer IMU data, subtracts previously computed calibration offset, and
@@ -525,12 +522,12 @@ Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawAccelData()
  *
  * @return Struct containing calibrated acceleration imu data read or empty struct if any of the underlying function steps fails
  */
-Mpu6050Flex_ImuData_t Mpu6050Flex_GetAccelData()
+Mpu6050Flex_ImuData_t Mpu6050Flex_GetAccelData(Mpu6050Flex_t Mpu6050Flex)
 {
 	Mpu6050Flex_ImuData_t RetData;
 
-	RetData = Mpu6050Flex_GetRawAccelData();
-	Mpu6050Flex_SubtractImuDataStruct(&RetData,&Mpu6050ImuDataOffset.AccData);
+	RetData = Mpu6050Flex_GetRawAccelData(Mpu6050Flex);
+	Mpu6050Flex_SubtractImuDataStruct(&RetData,&(Mpu6050Flex->Mpu6050ImuDataOffset.AccData));
 
 	return RetData;
 }
@@ -540,16 +537,16 @@ Mpu6050Flex_ImuData_t Mpu6050Flex_GetAccelData()
  *
  * @return Struct containing acceleration data in g's or empty struct if any of the underlying function steps fails.
  */
-Mpu6050Flex_ImuFloatData_t Mpu6050Flex_GetAccelDataG()
+Mpu6050Flex_ImuFloatData_t Mpu6050Flex_GetAccelDataG(Mpu6050Flex_t Mpu6050Flex)
 {
 	Mpu6050Flex_ImuData_t AccData;
 	Mpu6050Flex_ImuFloatData_t AccFloatData;
 
-	AccData = Mpu6050Flex_GetAccelData();
+	AccData = Mpu6050Flex_GetAccelData(Mpu6050Flex);
 
-	AccFloatData.FloatDataX = (float) AccData.DataX / Mpu6050Config.AccScale;
-	AccFloatData.FloatDataX = (float) AccData.DataY / Mpu6050Config.AccScale;
-	AccFloatData.FloatDataX = (float) AccData.DataZ / Mpu6050Config.AccScale;
+	AccFloatData.FloatDataX = (float) AccData.DataX / Mpu6050Flex->AccScale;
+	AccFloatData.FloatDataX = (float) AccData.DataY / Mpu6050Flex->AccScale;
+	AccFloatData.FloatDataX = (float) AccData.DataZ / Mpu6050Flex->AccScale;
 
 	return AccFloatData;
 }
@@ -559,9 +556,9 @@ Mpu6050Flex_ImuFloatData_t Mpu6050Flex_GetAccelDataG()
  *
  * @return Struct containing raw gyro imu data read or empty struct if any of the underlying function steps fails
  */
-Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawGyroData()
+Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawGyroData(Mpu6050Flex_t Mpu6050Flex)
 {
-	return Mpu6050Flex_GetImuData(REG_GYRO_XOUT_H);
+	return Mpu6050Flex_GetImuData(Mpu6050Flex,REG_GYRO_XOUT_H);
 }
 /**
  * @brief Reads 6 bytes of gyro IMU data, subtracts previously computed calibration offset, and
@@ -569,12 +566,12 @@ Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawGyroData()
  *
  * @return Struct containing calibrated gyro imu data read or empty struct if any of the underlying function steps fails
  */
-Mpu6050Flex_ImuData_t Mpu6050Flex_GetGyroData()
+Mpu6050Flex_ImuData_t Mpu6050Flex_GetGyroData(Mpu6050Flex_t Mpu6050Flex)
 {
 	Mpu6050Flex_ImuData_t RetData;
 
-	RetData = Mpu6050Flex_GetRawGyroData();
-	Mpu6050Flex_SubtractImuDataStruct(&RetData,&Mpu6050ImuDataOffset.GyroData);
+	RetData = Mpu6050Flex_GetRawGyroData(Mpu6050Flex);
+	Mpu6050Flex_SubtractImuDataStruct(&RetData,&(Mpu6050Flex->Mpu6050ImuDataOffset.GyroData));
 
 	return RetData;
 }
@@ -584,16 +581,16 @@ Mpu6050Flex_ImuData_t Mpu6050Flex_GetGyroData()
  *
  * @return Struct containing gyro data in deg/s or empty struct if any of the underlying function steps fails.
  */
-Mpu6050Flex_ImuFloatData_t Mpu6050Flex_GetGyroDataDegPerSec()
+Mpu6050Flex_ImuFloatData_t Mpu6050Flex_GetGyroDataDegPerSec(Mpu6050Flex_t Mpu6050Flex)
 {
 	Mpu6050Flex_ImuData_t GyroData;
 	Mpu6050Flex_ImuFloatData_t GyroFloatData;
 
-	GyroData = Mpu6050Flex_GetGyroData();
+	GyroData = Mpu6050Flex_GetGyroData(Mpu6050Flex);
 
-	GyroFloatData.FloatDataX = (float) GyroData.DataX / Mpu6050Config.GyroScale;
-	GyroFloatData.FloatDataX = (float) GyroData.DataY / Mpu6050Config.GyroScale;
-	GyroFloatData.FloatDataX = (float) GyroData.DataZ / Mpu6050Config.GyroScale;
+	GyroFloatData.FloatDataX = (float) GyroData.DataX / Mpu6050Flex->GyroScale;
+	GyroFloatData.FloatDataX = (float) GyroData.DataY / Mpu6050Flex->GyroScale;
+	GyroFloatData.FloatDataX = (float) GyroData.DataZ / Mpu6050Flex->GyroScale;
 
 	return GyroFloatData;
 }
@@ -603,9 +600,9 @@ Mpu6050Flex_ImuFloatData_t Mpu6050Flex_GetGyroDataDegPerSec()
  *
  * @return Struct containing the current calibration offset values for the accelerometer and gyro readings
  */
-Mpu6050Flex_FullImuData_t Mpu6050Flex_GetImuDataOffsets()
+Mpu6050Flex_FullImuData_t Mpu6050Flex_GetImuDataOffsets(Mpu6050Flex_t Mpu6050Flex)
 {
-	return Mpu6050ImuDataOffset;
+	return Mpu6050Flex->Mpu6050ImuDataOffset;
 }
 /**
  * @brief Subtracts the fields of a given Mpu6050Flex_ImuData_t struct
@@ -674,7 +671,7 @@ static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuData_t* pDest
  *
  * @return Status code to access operation success
  */
-MPU6050Flex_Status_t Mpu6050Flex_Calibrate()
+MPU6050Flex_Status_t Mpu6050Flex_Calibrate(Mpu6050Flex_t Mpu6050Flex)
 {
 	Mpu6050Flex_FullImuData32_t TempFullImuData = {0};
 	Mpu6050Flex_ImuData_t TempAccData;
@@ -686,15 +683,15 @@ MPU6050Flex_Status_t Mpu6050Flex_Calibrate()
 	for (idx=0;idx<POW_2(CALIBRATION_ITERATIONS_PO2);idx++)
 	{
 		/*Obtain new samples*/
-		TempAccData  = Mpu6050Flex_GetRawAccelData();
-		TempGyroData = Mpu6050Flex_GetRawGyroData();
+		TempAccData  = Mpu6050Flex_GetRawAccelData(Mpu6050Flex);
+		TempGyroData = Mpu6050Flex_GetRawGyroData(Mpu6050Flex);
 		if (idx == POW_2(CALIBRATION_ITERATIONS_PO2) -1)
 		{
 			/*If on the last calibration read, set time of last gyro read that
 			is used in attitude computation functions*/
-			if (Mpu6050Config.pGetMs)
+			if (Mpu6050Flex->pGetMs)
 			{
-				LastGyroReadTime = Mpu6050Config.pGetMs();
+				Mpu6050Flex->LastGyroReadTime = Mpu6050Flex->pGetMs();
 			}
 			else
 			{
@@ -706,9 +703,9 @@ MPU6050Flex_Status_t Mpu6050Flex_Calibrate()
 
 		/*Accumulate data that will be averaged out later */
 		Mpu6050Flex_AccumulateFullImuDataStruct(&TempFullImuData,&TempAccData,&TempGyroData);
-		if (Mpu6050Config.pDelay)
+		if (Mpu6050Flex->pDelay)
 		{
-			Mpu6050Config.pDelay(CALIBRATION_DELAY);
+			Mpu6050Flex->pDelay(CALIBRATION_DELAY);
 		}
 		else
 		{
@@ -719,7 +716,7 @@ MPU6050Flex_Status_t Mpu6050Flex_Calibrate()
 	}
 	/*Compute average data offsets for both gyro and accelerometer data ~
 	 * and write it in static imu data offset struct*/
-	Mpu6050Flex_DivideFullImuDataStruct(&Mpu6050ImuDataOffset,&TempFullImuData,CALIBRATION_ITERATIONS_PO2);
+	Mpu6050Flex_DivideFullImuDataStruct(&(Mpu6050Flex->Mpu6050ImuDataOffset),&TempFullImuData,CALIBRATION_ITERATIONS_PO2);
 
 	return Status;
 }
@@ -728,10 +725,10 @@ MPU6050Flex_Status_t Mpu6050Flex_Calibrate()
  *
  * @return Status code to access operation success
  */
-MPU6050Flex_Status_t Mpu6050Flex_Sleep()
+MPU6050Flex_Status_t Mpu6050Flex_Sleep(Mpu6050Flex_t Mpu6050Flex)
 {
 	MPU6050Flex_Status_t Status;
-	Status = Mpu6050Flex_UpdateParameter(MPU6050FLEX_SLEEP_SLEEP,MPU6050FLEX_SLEEP_MSK,REG_PWR_MGMT_1);
+	Status = Mpu6050Flex_UpdateParameter(Mpu6050Flex,MPU6050FLEX_SLEEP_SLEEP,MPU6050FLEX_SLEEP_MSK,REG_PWR_MGMT_1);
 
 	return Status;
 }
@@ -740,10 +737,10 @@ MPU6050Flex_Status_t Mpu6050Flex_Sleep()
  *
  * @return Status code to access operation success
  */
-MPU6050Flex_Status_t Mpu6050Flex_WakeUp()
+MPU6050Flex_Status_t Mpu6050Flex_WakeUp(Mpu6050Flex_t Mpu6050Flex)
 {
 	MPU6050Flex_Status_t Status;
-	Status = Mpu6050Flex_UpdateParameter(MPU6050FLEX_SLEEP_WAKE,MPU6050FLEX_SLEEP_MSK,REG_PWR_MGMT_1);
+	Status = Mpu6050Flex_UpdateParameter(Mpu6050Flex,MPU6050FLEX_SLEEP_WAKE,MPU6050FLEX_SLEEP_MSK,REG_PWR_MGMT_1);
 
 	return Status;
 }
