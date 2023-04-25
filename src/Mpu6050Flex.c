@@ -748,7 +748,7 @@ static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuData_t* pDest
  * To do so, a given amount of samples defined earlier (must be a power of two) is obtained in an amount of time defined earlier
  * and accumulated in a 32 bit Full IMU data struct,and later the accumulated data is averaged out and written in a 16 bit IMU
  * data struct, to give the average calibration data offset.
- * The IMU must be stationary and in a resting position for the specified amount of time for the calibration to work.
+ * The IMU must be stationary and in a resting position (Z axis facing up) for the specified amount of time for the calibration to work.
  *
  * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  *
@@ -770,9 +770,13 @@ MPU6050Flex_Status_t Mpu6050Flex_Calibrate(Mpu6050Flex_t Mpu6050Flex)
 		TempGyroData = Mpu6050Flex_GetRawGyroData(Mpu6050Flex);
 		if (idx == POW_2(CALIBRATION_ITERATIONS_PO2) -1)
 		{
+
 			/*If on the last calibration read, set time of Last Known Attitude read that
 			is used in attitude computation functions and set last known attitude to 0,0,0
 			(during calibration that should be the current attitude*/
+			/*Due to the way gyro data is converted into Euler angles,
+			 * for future attitude computations it is necessary to store
+			 * the last known attitude and the time it was obtained*/
 			if (Mpu6050Flex->pGetMs)
 			{
 				Mpu6050Flex->LastKnownAttitudeTime = Mpu6050Flex->pGetMs();
@@ -834,11 +838,12 @@ MPU6050Flex_Status_t Mpu6050Flex_WakeUp(Mpu6050Flex_t Mpu6050Flex)
 	return Status;
 }
 /**
- * @brief Converts
+ * @brief Converts an Mpu6050Flex_ImuData_t containing accelerometer data into Euler Angles
+ * Assumes that the mpu6050 was calibrated with the Z axis facing up
  *
  * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  *
- * @return Euler angle structure containing roll,pitch, and yaw
+ * @return Euler angle structure containing roll,pitch, and yaw based on accelerometer data
  */
 static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetAccEulerFromAccData(Mpu6050Flex_ImuData_t* pAccelData)
 {
@@ -846,31 +851,37 @@ static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetAccEulerFromAccData(Mpu6050Flex_
 
 	Euler.Roll = (atanf((pAccelData->DataY)/sqrtf(powf((pAccelData->DataX),2)+powf((pAccelData->DataZ),2))) * 180 / M_PI);
 	Euler.Pitch =  (atanf(-1 * (pAccelData->DataX) / sqrtf(powf((pAccelData->DataY), 2) + powf((pAccelData->DataZ), 2))) * 180 / M_PI);
+	/*Accelerometer data cannot be used to compute Yaw*/
 	Euler.Yaw = 0;
 
 	return Euler;
 }
-
-static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetGyroEulerFromGyroData(Mpu6050Flex_t Mpu6050Flex, Mpu6050Flex_ImuData_t* pGyroData)
+/**
+ * @brief Converts an Mpu6050Flex_ImuData_t containing gyro data into Euler Angles
+ * Assumes that the mpu6050 was calibrated with the Z axis facing up
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
+ * @return Euler angle structure containing roll,pitch, and yaw based on gyro data
+ */
+static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetGyroEulerFromGyroData(Mpu6050Flex_t Mpu6050Flex, Mpu6050Flex_ImuData_t* pGyroData, float EllapsedTime)
 {
 	Mpu6050Flex_EulerAngles_t Euler = {0};
 
-	uint32_t CurrentTime;
-	float EllapsedTime;
-
-	if (Mpu6050Flex->pGetMs)
-	{
-		CurrentTime = Mpu6050Flex->pGetMs();
-		EllapsedTime = (CurrentTime - Mpu6050Flex->LastKnownAttitudeTime)/1000.0;
-		Mpu6050Flex->LastKnownAttitudeTime = CurrentTime;
-		Euler.Roll = Mpu6050Flex->LastKnownAttitude.Roll + EllapsedTime*(pGyroData->DataX/Mpu6050Flex->GyroScale);
-		Euler.Pitch = Mpu6050Flex->LastKnownAttitude.Pitch + EllapsedTime*(pGyroData->DataY/Mpu6050Flex->GyroScale);
-		Euler.Yaw = Mpu6050Flex->LastKnownAttitude.Yaw + EllapsedTime*(pGyroData->DataZ/Mpu6050Flex->GyroScale);
-	}
+	Euler.Roll = Mpu6050Flex->LastKnownAttitude.Roll + EllapsedTime*(pGyroData->DataX/Mpu6050Flex->GyroScale);
+	Euler.Pitch = Mpu6050Flex->LastKnownAttitude.Pitch + EllapsedTime*(pGyroData->DataY/Mpu6050Flex->GyroScale);
+	Euler.Yaw = Mpu6050Flex->LastKnownAttitude.Yaw + EllapsedTime*(pGyroData->DataZ/Mpu6050Flex->GyroScale);
 
 	return Euler;
 }
-
+/**
+ * @brief Filters two sets of euler angles (one obtained from gyro and one from accelerometer data) to obtain a more
+ * reliable final set of euler angles. Based on the current complementary filter settings in the Mpu6050Flex instance
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
+ * @return Euler angle structure containing filtered roll,pitch, and yaw
+ */
 static Mpu6050Flex_EulerAngles_t Mpu6050Flex_ComplementaryFilterEuler(	Mpu6050Flex_t Mpu6050Flex,
 																		Mpu6050Flex_EulerAngles_t* pAccEuler,
 																		Mpu6050Flex_EulerAngles_t* pGyroEuler)
@@ -879,12 +890,20 @@ static Mpu6050Flex_EulerAngles_t Mpu6050Flex_ComplementaryFilterEuler(	Mpu6050Fl
 
 	FilteredEuler.Roll = pAccEuler->Roll*Mpu6050Flex->AccCFCoefficient+pGyroEuler->Roll*Mpu6050Flex->GyroCFCoefficient;
 	FilteredEuler.Pitch = pAccEuler->Pitch*Mpu6050Flex->AccCFCoefficient+pGyroEuler->Pitch*Mpu6050Flex->GyroCFCoefficient;
+	/*Accelerometer data cannot be used to compute Yaw so only gyro data is taken into account */
 	FilteredEuler.Yaw = pGyroEuler->Yaw;
 
 	return FilteredEuler;
 }
 
-
+/**
+ * @brief Obtains calibrated gyro and accelerometer data and converts it to two sets of euler angles
+ * then filters them to obtain a final euler angle estimate
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
+ * @return Euler angle structure containing filtered roll,pitch, and yaw
+ */
 Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetEuler(Mpu6050Flex_t Mpu6050Flex)
 {
 
@@ -898,8 +917,21 @@ Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetEuler(Mpu6050Flex_t Mpu6050Flex)
 	GyroData = Mpu6050Flex_GetGyroData(Mpu6050Flex);
 	AccData = Mpu6050Flex_GetAccelData(Mpu6050Flex);
 
+	float EllapsedTime;
+	uint32_t CurrentTime;
+
+	if (Mpu6050Flex->pGetMs)
+	{
+		/*Due to the way gyro data is converted into Euler angles,
+		 * for future attitude computations it is necessary to store
+		 * the last known attitude and the time it was obtained*/
+		CurrentTime = Mpu6050Flex->pGetMs();
+		EllapsedTime = (CurrentTime - Mpu6050Flex->LastKnownAttitudeTime)/1000.0;
+		Mpu6050Flex->LastKnownAttitudeTime = CurrentTime;
+	}
+
 	AccEuler = Mpu6050Flex_GetAccEulerFromAccData(&AccData);
-	GyroEuler = Mpu6050Flex_GetGyroEulerFromGyroData(Mpu6050Flex,&GyroData);
+	GyroEuler = Mpu6050Flex_GetGyroEulerFromGyroData(Mpu6050Flex,&GyroData,EllapsedTime);
 
 	FilteredEuler = Mpu6050Flex_ComplementaryFilterEuler(Mpu6050Flex,&AccEuler,&GyroEuler);
 
