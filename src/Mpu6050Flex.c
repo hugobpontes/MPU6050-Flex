@@ -58,8 +58,8 @@ static void Mpu6050Flex_SubtractImuDataStruct(Mpu6050Flex_ImuData_t* pA, Mpu6050
 static Mpu6050Flex_EulerAngles_t Mpu6050Flex_ComplementaryFilterEuler(	Mpu6050Flex_t Mpu6050Flex,
 																		Mpu6050Flex_EulerAngles_t* pAccEuler,
 																		Mpu6050Flex_EulerAngles_t* pGyroEuler);
-static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetAccEuler(Mpu6050Flex_ImuData_t* pAccelData);
-static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetGyroEuler(Mpu6050Flex_t Mpu6050Flex, Mpu6050Flex_ImuData_t* pGyroData);
+static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetAccEulerFromAccData(Mpu6050Flex_ImuData_t* pAccelData);
+static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetGyroEulerFromGyroData(Mpu6050Flex_t Mpu6050Flex, Mpu6050Flex_ImuData_t* pGyroData, float EllapsedTime);
 
 /* Allocate memory for Mpu6050FlexStruct_t containing all mpu6050 parameters
  * This functions allows user of this library to use Mpu6050FlexStruct_t in an abstracted way
