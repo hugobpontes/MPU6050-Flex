@@ -5,14 +5,15 @@
 #include "Mpu6050_MockIO.h"
 #include <stdbool.h>
 #include <math.h>
-
-/*This needs refactoring obviously*/
 /*Tests for strange conditions like sensor being saturated (or close) during
  * calibration, lack of calibration, or off-nominal attitude conditions aren't done
  * so those cases are unhandled.
  * Providing a super robust library is beyond my goal with writing this library */
+
+/* Definition of expected mpu6050 data that is going to be used by tests in this file
+ * This needs refactoring obviously but while there is no need to test other data sets this will be left as is*/
+
 uint8_t DataOut[6] = {0x11,0x22,0x33,0x44,0x55,0x66};
-uint16_t DataOut16bit[3] = {0x1122,0x3344,0x5566};
 
 uint8_t AccCalibData1[6] = {0x00,0x00,0x02,0x00,0x5F,0x01}; //1st set of readings
 uint8_t AccCalibData2[6] = {0x01,0x00,0x03,0x00,0x5F,0x01}; //2nd set of readings
@@ -24,18 +25,15 @@ uint8_t GyroCalibData2[6] = {0x08,0x00,0x01,0x00,0x0E,0x05}; //2nd set of readin
 uint8_t GyroCalibData3[6] = {0x08,0x00,0x01,0x00,0x0E,0x05}; //3rd set of readings
 uint8_t GyroCalibData4[6] = {0x09,0x00,0x02,0x00,0x0E,0x05}; //4th set of readings
 
+uint16_t DataOut16bit[3] = {0x1122,0x3344,0x5566};
 uint16_t CalibOffsetData[6] = {0x0800,0x0100,0x0E05,0x0100,0x0300,0x5F01-0x4000};
 
 uint16_t GyroDataOut16bitAfterCalib[3] = {0x1122-0x0800,0x3344-0x0100,0x5566-0x0E05};
 uint16_t AccDataOut16bitAfterCalib[3] = {0x1122-0x0100,0x3344-0x0300,0x5566-(0x5F01-0x4000)};
 
-
-
+/*Statically declared mpu6050 handle to be used by all tests*/
 static Mpu6050Flex_t Mpu6050;
 
-//Expected gyro euler
-//Expected acc euler
-//Expected filtered euler
 
 /**
  * @brief Compares two Mpu6050Flex_ImuData_t structs
@@ -485,12 +483,12 @@ TEST(Mpu6050CalibratedTests,CalibrateWritesAverageReadDataInInternalStructure)
 
 }
 /**
- * @brief Test that Mpu6050Flex_Calibrate will write the last gyro read time (set in expectations)
- * in the LastGyroReadTime static variable.
+ * @brief Test that Mpu6050Flex_Calibrate will write the Last Known Attitude Time (set in expectations)
+ * in the mpu6050 object.
  */
-TEST(Mpu6050CalibratedTests,CalibrateSetsLastGyroReadTimeAndLastKnownAttitude)
+TEST(Mpu6050CalibratedTests,CalibrateSetsLastKnownAttitudeTimeAndLastKnownAttitude)
 {
-	TEST_ASSERT_EQUAL_UINT32(25,Mpu6050Flex_GetLastGyroReadTime(Mpu6050));
+	TEST_ASSERT_EQUAL_UINT32(25,Mpu6050Flex_GetLastKnownAttitudeTime(Mpu6050));
 
 	Mpu6050Flex_EulerAngles_t LastKnownAttitude;
 
@@ -562,6 +560,10 @@ TEST_TEAR_DOWN(Mpu6050AttitudeTests)
 	Mpu6050Flex_Destroy(Mpu6050);
 }
 
+/**
+ * @brief Test that when calling function to get euler angles, returned angles are the expected ones considering
+ * data set defined in the top of this file.
+ */
 TEST(Mpu6050AttitudeTests,GetEulerFollowsCorrectOrderAndReturnsExpectedData)
 {
 
@@ -593,21 +595,23 @@ TEST(Mpu6050AttitudeTests,GetEulerFollowsCorrectOrderAndReturnsExpectedData)
 	TEST_ASSERT_EQUAL_FLOAT(ExpectedFilterEuler[2],RetEuler.Yaw);
 
 }
-
-TEST(Mpu6050AttitudeTests,GetEulerSetsLastGyroReadTimeAndLastKnownAttitude)
+/**
+ * @brief Test that when calling function to get euler angles, last known attitude and last known attitude time is set
+ */
+TEST(Mpu6050AttitudeTests,GetEulerSetsLastKnownAttitudeTimeAndLastKnownAttitude)
 {
 
 	Mpu6050Flex_EulerAngles_t RetEuler;
 	Mpu6050Flex_EulerAngles_t LastKnownAttitude;
-	uint32_t LastGyroReadTime;
+	uint32_t LastKnownAttitudeTime;
 
 	RetEuler = Mpu6050Flex_GetEuler(Mpu6050);
 	LastKnownAttitude = Mpu6050Flex_GetLastKnownAttitude(Mpu6050);
-	LastGyroReadTime = Mpu6050Flex_GetLastGyroReadTime(Mpu6050);
+	LastKnownAttitudeTime = Mpu6050Flex_GetLastKnownAttitudeTime(Mpu6050);
 
 	TEST_ASSERT_EQUAL_FLOAT(RetEuler.Roll,LastKnownAttitude.Roll);
 	TEST_ASSERT_EQUAL_FLOAT(RetEuler.Pitch,LastKnownAttitude.Pitch);
 	TEST_ASSERT_EQUAL_FLOAT(RetEuler.Yaw,LastKnownAttitude.Yaw);
-	TEST_ASSERT_EQUAL_UINT32(30,LastGyroReadTime);
+	TEST_ASSERT_EQUAL_UINT32(30,LastKnownAttitudeTime);
 }
 

@@ -45,7 +45,9 @@ typedef enum
 	MPU6050FLEX_DLPF_CFG6 = 0x06,
 	MPU6050FLEX_DLPF_CFG7 = 0x07,
 } MPU6050Flex_DLPF_Options_t;
-
+/**
+ * @brief Enum containing possible configurations of the SLEEP parameter in the POWER_MGMT1 register
+ */
 typedef enum
 {
 	/*Refer to mpu6050 register map to see what these options are about*/
@@ -101,19 +103,26 @@ typedef enum
 
 /**
  * @brief A type representing the signature that IO functions should have.
+ * @param1 Address of register to be read/written
+ * @param2 Number of bytes to read/write
+ * @param3 Memory location where read/write data is stored/read from
+ * @return Status code indicating success of operation
  */
 typedef IOStatus_t (*IOFunc_t)(uint8_t,uint32_t,uint8_t*);
 /**
  * @brief A type representing the signature that delay functions should have.
+ * @param1 Amount of milliseconds to wait
+ *
  */
 typedef void (*DelayFunc_t)(uint32_t);
 /**
  * @brief A type representing the signature that get milliseconds functions should have.
+ * @return milliseconds since start of execution
  */
 typedef uint32_t(*GetMsFunc_t)();
 
 /**
- * @brief Struct containing generic 16 bit IMU data readings for 3 axes
+ * @brief Struct containing generic signed 16 bit IMU data readings for 3 axes
  */
 typedef struct Mpu6050Flex_ImuData
 {
@@ -123,7 +132,7 @@ typedef struct Mpu6050Flex_ImuData
 }Mpu6050Flex_ImuData_t;
 
 /**
- * @brief Struct containing generic 16 bit IMU data readings for 3 axes
+ * @brief Struct containing generic signed 16 bit IMU data readings for 3 axes
  */
 typedef struct Mpu6050Flex_FloatData
 {
@@ -133,8 +142,8 @@ typedef struct Mpu6050Flex_FloatData
 }Mpu6050Flex_ImuFloatData_t;
 
 /**
- * @brief Struct containing generic 32 bit IMU data readings for 3 axes
- * 32 bit structs are necessary so several 16 bit structs can be added together without overflowing when computing averages
+ * @brief Struct containing generic signed 32 bit IMU data readings for 3 axes
+ * 32 bit structs are necessary for holding accumulated 16 bit readings that would overflow otherwise
  */
 typedef struct Mpu6050Flex_ImuData32
 {
@@ -143,7 +152,7 @@ typedef struct Mpu6050Flex_ImuData32
 	int32_t DataZ;
 }Mpu6050Flex_ImuData32_t;
 /**
- * @brief Struct containing all IMU data readings provided by MPU6050 (gyro+accel) for 3 axes in 16 bit format
+ * @brief Struct containing all IMU data readings provided by MPU6050 (gyro+accel) for 3 axes in signed 16 bit format
  */
 typedef struct Mpu6050Flex_FullImuData
 {
@@ -151,7 +160,7 @@ typedef struct Mpu6050Flex_FullImuData
 	Mpu6050Flex_ImuData_t AccData;
 }Mpu6050Flex_FullImuData_t;
 /**
- * @brief Struct containing all IMU data readings provided by MPU6050 (gyro+accel) for 3 axes in 32 bit format
+ * @brief Struct containing all IMU data readings provided by MPU6050 (gyro+accel) for 3 axes in signed 32 bit format
  * 32 bit structs are necessary so several 16 bit structs can be added together without overflowing when computing averages
  */
 typedef struct Mpu6050Flex_FullImuData32
@@ -160,7 +169,7 @@ typedef struct Mpu6050Flex_FullImuData32
 	Mpu6050Flex_ImuData32_t AccData;
 }Mpu6050Flex_FullImuData32_t;
 /**
- * @brief Struct containing the three Euler angles
+ * @brief Struct containing the three float Euler angles
  */
 typedef struct Mpu6050Flex_EulerAngles
 {
@@ -169,7 +178,9 @@ typedef struct Mpu6050Flex_EulerAngles
 	float Yaw;
 }Mpu6050Flex_EulerAngles_t;
 
-
+/**
+ * @brief Abstract data type that acts as a handle to an Mpu6050Flex instance
+ */
 typedef struct Mpu6050FlexStruct* Mpu6050Flex_t;
 
 Mpu6050Flex_t Mpu6050Flex_Create();
@@ -200,7 +211,7 @@ float Mpu6050Flex_GetGyroCFCoeff(Mpu6050Flex_t Mpu6050Flex);
 float Mpu6050Flex_GetAccCFCoeff(Mpu6050Flex_t Mpu6050Flex);
 MPU6050Flex_Status_t Mpu6050Flex_Sleep(Mpu6050Flex_t Mpu6050Flex);
 MPU6050Flex_Status_t Mpu6050Flex_WakeUp(Mpu6050Flex_t Mpu6050Flex);
-uint32_t Mpu6050Flex_GetLastGyroReadTime(Mpu6050Flex_t Mpu6050Flex);
+uint32_t Mpu6050Flex_GetLastKnownAttitudeTime(Mpu6050Flex_t Mpu6050Flex);
 Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetLastKnownAttitude(Mpu6050Flex_t Mpu6050Flex);
 Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetEuler(Mpu6050Flex_t Mpu6050Flex);
 

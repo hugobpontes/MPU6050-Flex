@@ -32,7 +32,7 @@ TEST_GROUP_RUNNER(Mpu6050Tests)
 TEST_GROUP_RUNNER(Mpu6050CalibratedTests)
 {
 	RUN_TEST_CASE(Mpu6050CalibratedTests, CalibrateWritesAverageReadDataInInternalStructure);
-	RUN_TEST_CASE(Mpu6050CalibratedTests, CalibrateSetsLastGyroReadTimeAndLastKnownAttitude);
+	RUN_TEST_CASE(Mpu6050CalibratedTests, CalibrateSetsLastKnownAttitudeTimeAndLastKnownAttitude);
 	RUN_TEST_CASE(Mpu6050CalibratedTests, GetGyroDataFollowsCorrectOrderAndReturnsExpectedData);
 	RUN_TEST_CASE(Mpu6050CalibratedTests, GetAccDataFollowsCorrectOrderAndReturnsExpectedData);
 }
@@ -40,5 +40,5 @@ TEST_GROUP_RUNNER(Mpu6050CalibratedTests)
 TEST_GROUP_RUNNER(Mpu6050AttitudeTests)
 {
 	RUN_TEST_CASE(Mpu6050AttitudeTests, GetEulerFollowsCorrectOrderAndReturnsExpectedData);
-	RUN_TEST_CASE(Mpu6050AttitudeTests, GetEulerSetsLastGyroReadTimeAndLastKnownAttitude);
+	RUN_TEST_CASE(Mpu6050AttitudeTests, GetEulerSetsLastKnownAttitudeTimeAndLastKnownAttitude);
 }

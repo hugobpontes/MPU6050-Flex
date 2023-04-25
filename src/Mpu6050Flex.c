@@ -15,8 +15,7 @@
 #include <stdlib.h>
 #include <math.h>
 /**
- * @brief Type representing a structure containing all configurable parameters in the Mpu6050 library.
- *
+ * @brief Handle to an instance of MPU6050 Flex containing its internal parameters
  */
 typedef struct Mpu6050FlexStruct
 {
@@ -24,13 +23,13 @@ typedef struct Mpu6050FlexStruct
 	IOFunc_t pIORead;  /**< Pointer to the function used to read bytes from the mpu6050 registers */
 	DelayFunc_t pDelay;/**< Pointer to the function used delay a given amount of ms */
 	GetMsFunc_t pGetMs;/**< Pointer used to obtain ms since start of program */
-	float AccScale;
-	float GyroScale;
+	float AccScale;/**< Scale by which accelerometer data must be divided to convert it to g's */
+	float GyroScale;/**< Scale by which accelerometer data must be divided to convert it to deg/s */
 	float AccCFCoefficient; /**< Complimentary filter coefficient corresponding to the accelerometer readings */
 	float GyroCFCoefficient; /**< Complimentary filter coefficient corresponding to the gyro readings */
-	Mpu6050Flex_FullImuData_t ImuDataOffset;
-	uint32_t LastGyroReadTime;
-	Mpu6050Flex_EulerAngles_t LastKnownAttitude;
+	Mpu6050Flex_FullImuData_t ImuDataOffset; /*Struct containing 3 axis calibration offset for both accelerometer and gyro data */
+	uint32_t LastKnownAttitudeTime; /*ms since start of program in which last attitude measurement was taken */
+	Mpu6050Flex_EulerAngles_t LastKnownAttitude; /*Euler angle struct containing last known attitude */
 } Mpu6050FlexStruct_t;
 
 #define CALIBRATION_DURATION 3000 		/**< Duration of calibration period */
@@ -62,7 +61,9 @@ static Mpu6050Flex_EulerAngles_t Mpu6050Flex_ComplementaryFilterEuler(	Mpu6050Fl
 static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetAccEuler(Mpu6050Flex_ImuData_t* pAccelData);
 static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetGyroEuler(Mpu6050Flex_t Mpu6050Flex, Mpu6050Flex_ImuData_t* pGyroData);
 
-
+/* Allocate memory for Mpu6050FlexStruct_t containing all mpu6050 parameters
+ * This functions allows user of this library to use Mpu6050FlexStruct_t in an abstracted way
+ */
 Mpu6050Flex_t Mpu6050Flex_Create()
 {
 	Mpu6050Flex_t Mpu6050Flex;
@@ -75,7 +76,7 @@ Mpu6050Flex_t Mpu6050Flex_Create()
 
 	return Mpu6050Flex;
 }
-
+/* Free memory previously allocated to an Mpu6050FlexStruct_t containing all mpu6050 parameters*/
 void Mpu6050Flex_Destroy(Mpu6050Flex_t Mpu6050Flex)
 {
 	free(Mpu6050Flex);
@@ -83,15 +84,23 @@ void Mpu6050Flex_Destroy(Mpu6050Flex_t Mpu6050Flex)
 
 
 /**
- * @brief Gets the time (in ms since program start) of the last gyro measurement used for attitude computation
+ * @brief Gets the time (in ms since program start) of the Last Known Attitude measurement used for attitude computation
  *
- * @return time of the last gyro measurement used for attitude computation
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
+ * @return time of the Last Known Attitude measurement used for attitude computation
  */
-uint32_t Mpu6050Flex_GetLastGyroReadTime(Mpu6050Flex_t Mpu6050Flex)
+uint32_t Mpu6050Flex_GetLastKnownAttitudeTime(Mpu6050Flex_t Mpu6050Flex)
 {
-	return Mpu6050Flex->LastGyroReadTime;
+	return Mpu6050Flex->LastKnownAttitudeTime;
 }
-
+/**
+ * @brief Gets the euler angle struct corresponding to the the Last Known Attitude
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
+ * @return Last Known Attitude measurement used for attitude computation
+ */
 Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetLastKnownAttitude(Mpu6050Flex_t Mpu6050Flex)
 {
 	return Mpu6050Flex->LastKnownAttitude;
@@ -99,6 +108,8 @@ Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetLastKnownAttitude(Mpu6050Flex_t Mpu6050
 
 /**
  * @brief Injects the IO Write function that this library uses
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  *
  * @param pWriteFunc: Function Pointer that points to the IO Write function to use
  */
@@ -109,6 +120,8 @@ void Mpu6050Flex_SetIOWrite(Mpu6050Flex_t Mpu6050Flex, IOFunc_t pWriteFunc)
 /**
  * @brief Injects the IO Read function that this library uses
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
  * @param pWriteFunc Function Pointer that points to the IO Read function to use
  */
 void Mpu6050Flex_SetIORead(Mpu6050Flex_t Mpu6050Flex, IOFunc_t pReadFunc)
@@ -118,6 +131,8 @@ void Mpu6050Flex_SetIORead(Mpu6050Flex_t Mpu6050Flex, IOFunc_t pReadFunc)
 /**
  * @brief Injects the Delay in ms function that this library uses
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
  * @param pDelay Function Pointer that points to the delay function to use
  */
 void Mpu6050Flex_SetDelay(Mpu6050Flex_t Mpu6050Flex, DelayFunc_t pDelay)
@@ -126,6 +141,8 @@ void Mpu6050Flex_SetDelay(Mpu6050Flex_t Mpu6050Flex, DelayFunc_t pDelay)
 }
 /**
  * @brief Injects the get milliseconds since program start function that this library uses
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  *
  * @param pGetMsFunction Pointer that points to the get milliseconds since program start function to use
  */
@@ -137,6 +154,8 @@ void Mpu6050Flex_SetGetMs(Mpu6050Flex_t Mpu6050Flex, GetMsFunc_t pGetMs)
 /**
  * @brief Gets a pointer to the currently set IO write function pointer
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
  * @return Pointer to the currently set IO write function pointer
  */
 IOFunc_t Mpu6050Flex_GetIOWrite(Mpu6050Flex_t Mpu6050Flex)
@@ -145,6 +164,8 @@ IOFunc_t Mpu6050Flex_GetIOWrite(Mpu6050Flex_t Mpu6050Flex)
 }
 /**
  * @brief Gets a pointer to the currently set IO read function pointer
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  *
  * @return Pointer to the currently set IO read function pointer
  */
@@ -155,6 +176,8 @@ IOFunc_t Mpu6050Flex_GetIORead(Mpu6050Flex_t Mpu6050Flex)
 /**
  * @brief Gets a pointer to the currently set delay in ms function pointer
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
  * @return Pointer to the currently set delay function pointer
  */
 DelayFunc_t Mpu6050Flex_GetDelay(Mpu6050Flex_t Mpu6050Flex)
@@ -163,6 +186,8 @@ DelayFunc_t Mpu6050Flex_GetDelay(Mpu6050Flex_t Mpu6050Flex)
 }
 /**
  * @brief Gets a pointer to the currently set get milliseconds function pointer
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  *
  * @return Pointer to the currently set get milliseconds function pointer
  */
@@ -174,6 +199,8 @@ GetMsFunc_t Mpu6050Flex_GetGetMs(Mpu6050Flex_t Mpu6050Flex)
  * @brief Gets the currently set accelerometer scale.
  * SCALE -> Ratio between 2^16 (16 bit resolution) and the available full scale range options (including negative values)
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
  * @return currently set accelerometer scale.
  */
 float Mpu6050Flex_GetAccScale(Mpu6050Flex_t Mpu6050Flex)
@@ -184,6 +211,8 @@ float Mpu6050Flex_GetAccScale(Mpu6050Flex_t Mpu6050Flex)
  * @brief Gets the currently set gyro scale.
  * SCALE -> Ratio between 2^16 (16 bit resolution) and the available full scale range options (including negative values)
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
  * @return currently set gyro scale.
  */
 float Mpu6050Flex_GetGyroScale(Mpu6050Flex_t Mpu6050Flex)
@@ -193,6 +222,7 @@ float Mpu6050Flex_GetGyroScale(Mpu6050Flex_t Mpu6050Flex)
 /**
  * @brief Sets the gyro and accelerometer coefficients of the used complementary filter
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  * @param GyroCoeff Gyroscope coefficeient of the complementary filter used (0.0-1.0)
  * @param AccCoeff Accelerometer coefficeient of the complementary filter used (0.0-1.0)
  *
@@ -202,6 +232,7 @@ MPU6050Flex_Status_t Mpu6050Flex_SetComplementaryFilterCoeffs(Mpu6050Flex_t Mpu6
 {
 	MPU6050Flex_Status_t Status = MPU6050FLEX_SUCCESS;
 	float sum = GyroCoeff + AccCoeff;
+	/*Make sure that inputs are valid considering their nature*/
 	if ((GyroCoeff > 0) && (AccCoeff > 0) && (sum == 1.0))
 	{
 		Mpu6050Flex->AccCFCoefficient = AccCoeff;
@@ -217,6 +248,8 @@ MPU6050Flex_Status_t Mpu6050Flex_SetComplementaryFilterCoeffs(Mpu6050Flex_t Mpu6
 /**
  * @brief Gets the currently set gyro complementary filter coefficient
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
  * @return currently set gyro complementary filter coefficient.
  */
 float Mpu6050Flex_GetGyroCFCoeff(Mpu6050Flex_t Mpu6050Flex)
@@ -225,6 +258,8 @@ float Mpu6050Flex_GetGyroCFCoeff(Mpu6050Flex_t Mpu6050Flex)
 }
 /**
  * @brief Gets the currently set accelerometer complementary filter coefficient
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  *
  * @return currently set accelerometer complementary filter coefficient.
  */
@@ -236,6 +271,8 @@ float Mpu6050Flex_GetAccCFCoeff(Mpu6050Flex_t Mpu6050Flex)
 /**
  * @brief Requests the i2c address of the mpu6050 device via i2c, used to verify working i2c interface
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
  * @return I2C Address of the MPU6050 or 0xFF if it wasnt possible to obtain a valid address
  */
 uint8_t Mpu6050Flex_WhoAmI(Mpu6050Flex_t Mpu6050Flex)
@@ -244,6 +281,7 @@ uint8_t Mpu6050Flex_WhoAmI(Mpu6050Flex_t Mpu6050Flex)
 
 	if (Mpu6050Flex->pIORead)
 	{
+		/*Read 1 byte from REG_WHO_AM_I*/
 		if (Mpu6050Flex->pIORead(REG_WHO_AM_I,1,&Mpu6050Address) != IO_SUCCESS)
 		{
 			Mpu6050Address = 0xFF;
@@ -253,6 +291,8 @@ uint8_t Mpu6050Flex_WhoAmI(Mpu6050Flex_t Mpu6050Flex)
 }
 /**
  * @brief Updates the SMPLRT_DIV parameter of the SMPRT_DIV register, configuring the sample rate divider
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  *
  * @param Division: Value to set in the SMPLRT_DIV parameter of the SMPRT_DIV register, representing by how much the gyro rate must be
  * divided to obtain the sample rate (div = 1+SMPLRT_DIV)
@@ -271,6 +311,8 @@ MPU6050Flex_Status_t Mpu6050Flex_ConfigSampleRateDivider(Mpu6050Flex_t Mpu6050Fl
  * @brief Updates the MPU6050FLEX_DLPF_CFG parameter of the CONFIG register, configuring the digital filter as specified
  * in the register map document (section 4.3)
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
  * @param ConfigOption: Configuration option as specified in the appropriate register map section,
  * if value isn't part of the MPU6050Flex_DLPF_Options_t enum, this function will return an error
  *
@@ -288,6 +330,7 @@ MPU6050Flex_Status_t Mpu6050Flex_ConfigDigitalLowPassFilter(Mpu6050Flex_t Mpu605
  * @brief Updates the FS_SEL parameter of the GYRO_CONFIG register, configuring the gyro full scale range
  * Also configures the local gyro scale variable
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  * @param ConfigOption: Configuration option as specified in the appropriate register map section,
  * if value isn't part of the MPU6050Flex_GYRO_FS_SEL_Options_t enum, this function will return an error:
  *  MPU6050FLEX_GYRO_FS_SEL_25		: Full Scale Range +- 25 deg
@@ -328,6 +371,7 @@ MPU6050Flex_Status_t Mpu6050Flex_ConfigGyroFullScaleRange(Mpu6050Flex_t Mpu6050F
  * @brief Updates the AFS_SEL parameter of the ACCEL_CONFIG register, configuring the accelerometer full scale range.
  * Also configures the local accelerometer scale variable
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  * @param ConfigOption: Configuration option as specified in the appropriate register map section,
  * if value isn't part of the MPU6050Flex_ACC_FS_SEL_Options_t enum, this function will return an error:
  *  MPU6050FLEX_ACC_FS_SEL_2	: Full Scale Range +- 2g
@@ -368,6 +412,7 @@ MPU6050Flex_Status_t Mpu6050Flex_ConfigAccFullScaleRange(Mpu6050Flex_t Mpu6050Fl
  * @brief Reads a given register,changes a segment of it based on a parameter
  * value and mask that fit within that register, and writes the updated value back.
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  * @param RegisterAddress: Register address of where the segment to be replaced is
  * @param SegmentMask: Mask to indicate which segment of the register is to be replaced
  * @param Value: Value to write in the replaced segment
@@ -405,8 +450,9 @@ static MPU6050Flex_Status_t Mpu6050Flex_ReplaceRegisterSegment(Mpu6050Flex_t Mpu
 	return Status;
 }
 /**
- * @brief Writes a byte to a given register
+ * @brief Writes a full byte to a given register, completely overwriting it
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  * @param RegisterAddress: Register address to be written to
  * @param Value: Value to write in the referenced register
  *
@@ -432,7 +478,7 @@ static MPU6050Flex_Status_t Mpu6050Flex_WriteFullRegister(Mpu6050Flex_t Mpu6050F
 }
 
 /**
- * @brief Simple inline-like function to asses if a given value fits within a given mask
+ * @brief Simple inline-like function to assess if a given value fits within a given mask
  *
  * @param Value: Value being checked
  * @param Mask: Mask to check the value against
@@ -445,7 +491,9 @@ static bool Mpu6050Flex_ValueFitsInMask(uint8_t Value, uint8_t Mask)
 }
 /**
  * @brief Updates a given parameter on a given register based on a parameter mask, value and register address.
+ * If parameter consists of the complete byte, the byte is completely overwritten, otherwise, just a part of it is replaced
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  * @param ParameterValue: Value to set a given parameter to
  * @param ParameterMask: Parameter maks
  * @param RegisterAddress: Register address of where parameter is defined in MPU6050.
@@ -500,6 +548,7 @@ static bool Mpu6050Flex_IsValidImuDataRegister(uint8_t DataRegister)
  * @brief Reads 6 bytes of Imu data (gyro or accel data) from a given register and
  * returns a imu data struct with read data
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  * @param DataRegister: Register in which data read should start
  *
  * @return Struct containing imu data read or empty struct if any of the function steps fails
@@ -528,6 +577,8 @@ static Mpu6050Flex_ImuData_t Mpu6050Flex_GetImuData(Mpu6050Flex_t Mpu6050Flex, u
  * @brief Reads 6 bytes of accelerometer IMU data and
  * returns a imu data struct with read data
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
  * @return Struct containing raw acceleration imu data read or empty struct if any of the underlying function steps fails
  */
 Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawAccelData(Mpu6050Flex_t Mpu6050Flex)
@@ -537,6 +588,8 @@ Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawAccelData(Mpu6050Flex_t Mpu6050Flex)
 /**
  * @brief Reads 6 bytes of accelerometer IMU data, subtracts previously computed calibration offset, and
  * returns a imu data struct with calibrated data
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  *
  * @return Struct containing calibrated acceleration imu data read or empty struct if any of the underlying function steps fails
  */
@@ -552,6 +605,8 @@ Mpu6050Flex_ImuData_t Mpu6050Flex_GetAccelData(Mpu6050Flex_t Mpu6050Flex)
 /**
  * @brief Reads 6 bytes of accelerometer IMU data, subtracts previously computed calibration offset, divides the read data by the
  * set scale, and returns a imu float data struct with the data in g's
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  *
  * @return Struct containing acceleration data in g's or empty struct if any of the underlying function steps fails.
  */
@@ -572,6 +627,8 @@ Mpu6050Flex_ImuFloatData_t Mpu6050Flex_GetAccelDataG(Mpu6050Flex_t Mpu6050Flex)
  * @brief Reads 6 bytes of gyro IMU data and
  * returns a imu data struct with read data
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
  * @return Struct containing raw gyro imu data read or empty struct if any of the underlying function steps fails
  */
 Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawGyroData(Mpu6050Flex_t Mpu6050Flex)
@@ -581,6 +638,8 @@ Mpu6050Flex_ImuData_t Mpu6050Flex_GetRawGyroData(Mpu6050Flex_t Mpu6050Flex)
 /**
  * @brief Reads 6 bytes of gyro IMU data, subtracts previously computed calibration offset, and
  * returns a imu data struct with calibrated data
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  *
  * @return Struct containing calibrated gyro imu data read or empty struct if any of the underlying function steps fails
  */
@@ -596,6 +655,8 @@ Mpu6050Flex_ImuData_t Mpu6050Flex_GetGyroData(Mpu6050Flex_t Mpu6050Flex)
 /**
  * @brief Reads 6 bytes of gyro IMU data, subtracts previously computed calibration offset, divides the read data by the
  * set scale, and returns a imu float data struct with the data in deg/s
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  *
  * @return Struct containing gyro data in deg/s or empty struct if any of the underlying function steps fails.
  */
@@ -615,6 +676,8 @@ Mpu6050Flex_ImuFloatData_t Mpu6050Flex_GetGyroDataDegPerSec(Mpu6050Flex_t Mpu605
 
 /**
  * @brief Function used to be obtain the current calibration offset values for the accelerometer and gyro readings
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  *
  * @return Struct containing the current calibration offset values for the accelerometer and gyro readings
  */
@@ -687,6 +750,8 @@ static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuData_t* pDest
  * data struct, to give the average calibration data offset.
  * The IMU must be stationary and in a resting position for the specified amount of time for the calibration to work.
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
  * @return Status code to access operation success
  */
 MPU6050Flex_Status_t Mpu6050Flex_Calibrate(Mpu6050Flex_t Mpu6050Flex)
@@ -705,11 +770,12 @@ MPU6050Flex_Status_t Mpu6050Flex_Calibrate(Mpu6050Flex_t Mpu6050Flex)
 		TempGyroData = Mpu6050Flex_GetRawGyroData(Mpu6050Flex);
 		if (idx == POW_2(CALIBRATION_ITERATIONS_PO2) -1)
 		{
-			/*If on the last calibration read, set time of last gyro read that
-			is used in attitude computation functions and set last known attitude to 0,0,0*/
+			/*If on the last calibration read, set time of Last Known Attitude read that
+			is used in attitude computation functions and set last known attitude to 0,0,0
+			(during calibration that should be the current attitude*/
 			if (Mpu6050Flex->pGetMs)
 			{
-				Mpu6050Flex->LastGyroReadTime = Mpu6050Flex->pGetMs();
+				Mpu6050Flex->LastKnownAttitudeTime = Mpu6050Flex->pGetMs();
 				Mpu6050Flex->LastKnownAttitude.Pitch = 0.0;
 				Mpu6050Flex->LastKnownAttitude.Yaw = 0.0;
 				Mpu6050Flex->LastKnownAttitude.Roll = 0.0;
@@ -720,8 +786,6 @@ MPU6050Flex_Status_t Mpu6050Flex_Calibrate(Mpu6050Flex_t Mpu6050Flex)
 				break;
 			}
 		}
-
-
 		/*Accumulate data that will be averaged out later */
 		Mpu6050Flex_AccumulateFullImuDataStruct(&TempFullImuData,&TempAccData,&TempGyroData);
 		if (Mpu6050Flex->pDelay)
@@ -735,14 +799,16 @@ MPU6050Flex_Status_t Mpu6050Flex_Calibrate(Mpu6050Flex_t Mpu6050Flex)
 		}
 
 	}
-	/*Compute average data offsets for both gyro and accelerometer data ~
-	 * and write it in static imu data offset struct*/
+	/*Compute average data offsets for both gyro and accelerometer data
+	 * and write it in imu data offset parameter of the mpu6050 instance*/
 	Mpu6050Flex_DivideFullImuDataStruct(&(Mpu6050Flex->ImuDataOffset),&TempFullImuData,CALIBRATION_ITERATIONS_PO2);
 
 	return Status;
 }
 /**
  * @brief Updates the SLEEP parameter of the PWR_MGMT_1, turning it ON.
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  *
  * @return Status code to access operation success
  */
@@ -756,6 +822,8 @@ MPU6050Flex_Status_t Mpu6050Flex_Sleep(Mpu6050Flex_t Mpu6050Flex)
 /**
  * @brief Updates the SLEEP parameter of the PWR_MGMT_1, turning it OFF.
  *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
  * @return Status code to access operation success
  */
 MPU6050Flex_Status_t Mpu6050Flex_WakeUp(Mpu6050Flex_t Mpu6050Flex)
@@ -765,8 +833,14 @@ MPU6050Flex_Status_t Mpu6050Flex_WakeUp(Mpu6050Flex_t Mpu6050Flex)
 
 	return Status;
 }
-
-static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetAccEuler(Mpu6050Flex_ImuData_t* pAccelData)
+/**
+ * @brief Converts
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ *
+ * @return Euler angle structure containing roll,pitch, and yaw
+ */
+static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetAccEulerFromAccData(Mpu6050Flex_ImuData_t* pAccelData)
 {
 	Mpu6050Flex_EulerAngles_t Euler;
 
@@ -777,7 +851,7 @@ static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetAccEuler(Mpu6050Flex_ImuData_t* 
 	return Euler;
 }
 
-static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetGyroEuler(Mpu6050Flex_t Mpu6050Flex, Mpu6050Flex_ImuData_t* pGyroData)
+static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetGyroEulerFromGyroData(Mpu6050Flex_t Mpu6050Flex, Mpu6050Flex_ImuData_t* pGyroData)
 {
 	Mpu6050Flex_EulerAngles_t Euler = {0};
 
@@ -787,8 +861,8 @@ static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetGyroEuler(Mpu6050Flex_t Mpu6050F
 	if (Mpu6050Flex->pGetMs)
 	{
 		CurrentTime = Mpu6050Flex->pGetMs();
-		EllapsedTime = (CurrentTime - Mpu6050Flex->LastGyroReadTime)/1000.0;
-		Mpu6050Flex->LastGyroReadTime = CurrentTime;
+		EllapsedTime = (CurrentTime - Mpu6050Flex->LastKnownAttitudeTime)/1000.0;
+		Mpu6050Flex->LastKnownAttitudeTime = CurrentTime;
 		Euler.Roll = Mpu6050Flex->LastKnownAttitude.Roll + EllapsedTime*(pGyroData->DataX/Mpu6050Flex->GyroScale);
 		Euler.Pitch = Mpu6050Flex->LastKnownAttitude.Pitch + EllapsedTime*(pGyroData->DataY/Mpu6050Flex->GyroScale);
 		Euler.Yaw = Mpu6050Flex->LastKnownAttitude.Yaw + EllapsedTime*(pGyroData->DataZ/Mpu6050Flex->GyroScale);
@@ -824,8 +898,8 @@ Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetEuler(Mpu6050Flex_t Mpu6050Flex)
 	GyroData = Mpu6050Flex_GetGyroData(Mpu6050Flex);
 	AccData = Mpu6050Flex_GetAccelData(Mpu6050Flex);
 
-	AccEuler = Mpu6050Flex_GetAccEuler(&AccData);
-	GyroEuler = Mpu6050Flex_GetGyroEuler(Mpu6050Flex,&GyroData);
+	AccEuler = Mpu6050Flex_GetAccEulerFromAccData(&AccData);
+	GyroEuler = Mpu6050Flex_GetGyroEulerFromGyroData(Mpu6050Flex,&GyroData);
 
 	FilteredEuler = Mpu6050Flex_ComplementaryFilterEuler(Mpu6050Flex,&AccEuler,&GyroEuler);
 
