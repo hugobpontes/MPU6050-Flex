@@ -191,10 +191,10 @@ TEST_TEAR_DOWN(Mpu6050SetupTests)
 
 TEST(Mpu6050SetupTests,DefaultParametersArentEmpty)
 {
-	TEST_ASSERT_EQUAL(Mpu6050Flex_GetAccCFCoeff(Mpu6050),0.02);
-	TEST_ASSERT_EQUAL(Mpu6050Flex_GetGyroCFCoeff(Mpu6050),0.98);
-	TEST_ASSERT_EQUAL(Mpu6050Flex_GetAccScale(Mpu6050),16383);
-	TEST_ASSERT_EQUAL(Mpu6050Flex_GetGyroScale(Mpu6050),131);
+	TEST_ASSERT_EQUAL_FLOAT(Mpu6050Flex_GetAccCFCoeff(Mpu6050),0.02);
+	TEST_ASSERT_EQUAL_FLOAT(Mpu6050Flex_GetGyroCFCoeff(Mpu6050),0.98);
+	TEST_ASSERT_EQUAL_FLOAT(Mpu6050Flex_GetAccScale(Mpu6050),16383.75);
+	TEST_ASSERT_EQUAL_FLOAT(Mpu6050Flex_GetGyroScale(Mpu6050),131.07);
 }
 
 /**
@@ -314,7 +314,7 @@ TEST(Mpu6050Tests,ConfigureGyroFullScaleRangeFollowsSequenceAndDoesntOverwrite)
 	SetupParameterUpdateExpectations(ExpReadValue,ParamMask,ConfigOption,ParamReg);
 
 	TEST_ASSERT_EQUAL(MPU6050FLEX_SUCCESS,Mpu6050Flex_ConfigGyroFullScaleRange(Mpu6050,MPU6050FLEX_GYRO_FS_SEL_500));
-	TEST_ASSERT_EQUAL(66,Mpu6050Flex_GetGyroScale(Mpu6050));
+	TEST_ASSERT_EQUAL(65.54,Mpu6050Flex_GetGyroScale(Mpu6050));
 }
 /**
  * @brief Tests that using Mpu6050Flex_ConfigGyroFullScaleRange with bad arguments return an error status
@@ -337,7 +337,7 @@ TEST(Mpu6050Tests,ConfigureAccFullScaleRangeFollowsSequenceAndDoesntOverwrite)
 	SetupParameterUpdateExpectations(ExpReadValue,ParamMask,ConfigOption,ParamReg);
 
 	TEST_ASSERT_EQUAL(MPU6050FLEX_SUCCESS,Mpu6050Flex_ConfigAccFullScaleRange(Mpu6050,MPU6050FLEX_ACC_FS_SEL_8));
-	TEST_ASSERT_EQUAL(4096,Mpu6050Flex_GetAccScale(Mpu6050));
+	TEST_ASSERT_EQUAL(4095.937,Mpu6050Flex_GetAccScale(Mpu6050));
 }
 /**
  * @brief Tests that using Mpu6050Flex_ConfigAccFullScaleRange with bad arguments return an error status
@@ -488,9 +488,16 @@ TEST(Mpu6050CalibratedTests,CalibrateWritesAverageReadDataInInternalStructure)
  * @brief Test that Mpu6050Flex_Calibrate will write the last gyro read time (set in expectations)
  * in the LastGyroReadTime static variable.
  */
-TEST(Mpu6050CalibratedTests,CalibrateSetsLastGyroReadTime)
+TEST(Mpu6050CalibratedTests,CalibrateSetsLastGyroReadTimeAndLastKnownAttitude)
 {
-	TEST_ASSERT_EQUAL(25,Mpu6050Flex_GetLastGyroReadTime(Mpu6050));
+	TEST_ASSERT_EQUAL_UINT32(25,Mpu6050Flex_GetLastGyroReadTime(Mpu6050));
+
+	Mpu6050Flex_EulerAngles_t LastKnownAttitude;
+
+	LastKnownAttitude = Mpu6050Flex_GetLastKnownAttitude(Mpu6050);
+	TEST_ASSERT_EQUAL_FLOAT(0.0,LastKnownAttitude.Pitch);
+	TEST_ASSERT_EQUAL_FLOAT(0.0,LastKnownAttitude.Roll);
+	TEST_ASSERT_EQUAL_FLOAT(0.0,LastKnownAttitude.Yaw);
 }
 
 /**
@@ -541,6 +548,11 @@ TEST_SETUP(Mpu6050AttitudeTests)
 	SetupCalibrationExpectations();
 	Mpu6050Flex_Calibrate(Mpu6050);
 
+	/*Expected read of 6 data bytes*/
+	MockMpu6050IO_ExpectReadAndReturn(0x43,6,DataOut);
+	MockMpu6050IO_ExpectReadAndReturn(0x3B,6,DataOut);
+	MockMpu6050IO_ExpectGetMsAndReturn(30);
+
 }
 
 TEST_TEAR_DOWN(Mpu6050AttitudeTests)
@@ -559,30 +571,19 @@ TEST(Mpu6050AttitudeTests,GetEulerFollowsCorrectOrderAndReturnsExpectedData)
 	float ExpectedGyroEuler[3] = {1.0,0.0,0.0};
 	float ExpectedFilterEuler[3] = {1.0,0.0,0.0};
 
-	/*accAngleX = (atan(AccY / sqrt(pow(AccX, 2) + pow(AccZ, 2))) * 180 / PI) - 0.58; // AccErrorX ~(0.58) See the calculate_IMU_error()custom function for more details
-	  accAngleY = (atan(-1 * AccX / sqrt(pow(AccY, 2) + pow(AccZ, 2))) * 180 / PI) + 1.58; // AccErrorY ~(-1.58)
-	gyroAngleX = gyroAngleX + GyroX * elapsedTime;
-	 gyroAngleY = gyroAngleY + GyroY * elapsedTime;
-	 yaw =  yaw + GyroZ * elapsedTime;
-	 euler = coeef*gyro*/
 
-	/*Expected read of 6 data bytes*/
-	MockMpu6050IO_ExpectReadAndReturn(0x43,6,DataOut);
-	MockMpu6050IO_ExpectReadAndReturn(0x3B,6,DataOut);
-	MockMpu6050IO_ExpectGetMsAndReturn(30);
-
-	ExpectedAccEuler[0] = (atanf(AccDataOut16bitAfterCalib[1] / sqrtf(powf(AccDataOut16bitAfterCalib[0], 2) + powf(AccDataOut16bitAfterCalib[2], 2))) * 180 / M_PI);
-	ExpectedAccEuler[1] = (atanf(-1 * AccDataOut16bitAfterCalib[0] / sqrtf(powf(AccDataOut16bitAfterCalib[1], 2) + powf(AccDataOut16bitAfterCalib[2], 2))) * 180 / M_PI);
+	ExpectedAccEuler[0] = (atanf((AccDataOut16bitAfterCalib[1]/16383.75)  / sqrtf(powf((AccDataOut16bitAfterCalib[0]/16383.75), 2) + powf((AccDataOut16bitAfterCalib[2]/16383.75), 2))) * 180 / M_PI);
+	ExpectedAccEuler[1] = (atanf(-1 * (AccDataOut16bitAfterCalib[0]/16383.75 ) / sqrtf(powf((AccDataOut16bitAfterCalib[1]/16383.75 ), 2) + powf((AccDataOut16bitAfterCalib[2]/16383.75), 2))) * 180 / M_PI);
 	ExpectedAccEuler[2] = 0;
 
 	uint32_t EllapsedTime = 30-25;
-	ExpectedGyroEuler[0]= (CalibGyroEuler[0]/131)+AccDataOut16bitAfterCalib[0]*5;
-	ExpectedGyroEuler[1]= (CalibGyroEuler[1]/131)+AccDataOut16bitAfterCalib[1]*5;
-	ExpectedGyroEuler[2]= (CalibGyroEuler[2]/131)+AccDataOut16bitAfterCalib[2]*5;
+	ExpectedGyroEuler[0]= CalibGyroEuler[0]+(GyroDataOut16bitAfterCalib[0]/131.07)*0.005;
+	ExpectedGyroEuler[1]= CalibGyroEuler[1]+(GyroDataOut16bitAfterCalib[1]/131.07)*0.005;
+	ExpectedGyroEuler[2]= CalibGyroEuler[2]+(GyroDataOut16bitAfterCalib[2]/131.07)*0.005;
 
-	ExpectedFilterEuler[0] = 0.02*ExpectedAccEuler[0]+0.98*ExpectedAccEuler[0];
-	ExpectedFilterEuler[1] = 0.02*ExpectedAccEuler[1]+0.98*ExpectedAccEuler[1];
-	ExpectedFilterEuler[2] = 0.02*ExpectedAccEuler[2]+0.98*ExpectedAccEuler[2];
+	ExpectedFilterEuler[0] = 0.02*ExpectedAccEuler[0]+0.98*ExpectedGyroEuler[0];
+	ExpectedFilterEuler[1] = 0.02*ExpectedAccEuler[1]+0.98*ExpectedGyroEuler[1];
+	ExpectedFilterEuler[2] = ExpectedGyroEuler[2];
 
 	Mpu6050Flex_EulerAngles_t RetEuler;
 	RetEuler = Mpu6050Flex_GetEuler(Mpu6050);
@@ -591,10 +592,22 @@ TEST(Mpu6050AttitudeTests,GetEulerFollowsCorrectOrderAndReturnsExpectedData)
 	TEST_ASSERT_EQUAL_FLOAT(ExpectedFilterEuler[1],RetEuler.Pitch);
 	TEST_ASSERT_EQUAL_FLOAT(ExpectedFilterEuler[2],RetEuler.Yaw);
 
-	//test that returned euler angles are correct for data out set in the beginning of this file
-	//considering last gyro time and last known attitude are set during calibration
-
 }
 
-//TEST: get euler sets last known attitude and last gyro read time
+TEST(Mpu6050AttitudeTests,GetEulerSetsLastGyroReadTimeAndLastKnownAttitude)
+{
+
+	Mpu6050Flex_EulerAngles_t RetEuler;
+	Mpu6050Flex_EulerAngles_t LastKnownAttitude;
+	uint32_t LastGyroReadTime;
+
+	RetEuler = Mpu6050Flex_GetEuler(Mpu6050);
+	LastKnownAttitude = Mpu6050Flex_GetLastKnownAttitude(Mpu6050);
+	LastGyroReadTime = Mpu6050Flex_GetLastGyroReadTime(Mpu6050);
+
+	TEST_ASSERT_EQUAL_FLOAT(RetEuler.Roll,LastKnownAttitude.Roll);
+	TEST_ASSERT_EQUAL_FLOAT(RetEuler.Pitch,LastKnownAttitude.Pitch);
+	TEST_ASSERT_EQUAL_FLOAT(RetEuler.Yaw,LastKnownAttitude.Yaw);
+	TEST_ASSERT_EQUAL_UINT32(30,LastGyroReadTime);
+}
 

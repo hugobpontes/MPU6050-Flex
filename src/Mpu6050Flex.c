@@ -13,6 +13,7 @@
 #include <string.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <math.h>
 /**
  * @brief Type representing a structure containing all configurable parameters in the Mpu6050 library.
  *
@@ -23,12 +24,13 @@ typedef struct Mpu6050FlexStruct
 	IOFunc_t pIORead;  /**< Pointer to the function used to read bytes from the mpu6050 registers */
 	DelayFunc_t pDelay;/**< Pointer to the function used delay a given amount of ms */
 	GetMsFunc_t pGetMs;/**< Pointer used to obtain ms since start of program */
-	int16_t AccScale;
-	int16_t GyroScale;
+	float AccScale;
+	float GyroScale;
 	float AccCFCoefficient; /**< Complimentary filter coefficient corresponding to the accelerometer readings */
 	float GyroCFCoefficient; /**< Complimentary filter coefficient corresponding to the gyro readings */
-	Mpu6050Flex_FullImuData_t Mpu6050ImuDataOffset;
+	Mpu6050Flex_FullImuData_t ImuDataOffset;
 	uint32_t LastGyroReadTime;
+	Mpu6050Flex_EulerAngles_t LastKnownAttitude;
 } Mpu6050FlexStruct_t;
 
 #define CALIBRATION_DURATION 3000 		/**< Duration of calibration period */
@@ -37,14 +39,14 @@ typedef struct Mpu6050FlexStruct
 #define CALIBRATION_DELAY ((CALIBRATION_DURATION)/(POW_2(CALIBRATION_ITERATIONS_PO2))) /**< Calibration delay to match above settings */
 
 //SCALE -> Ratio between 2^16 (16 bit resolution) and the available full scale range options (including negative values)
-#define SCALE_MPU6050FLEX_GYRO_FS_SEL_250 	131 //~(((1<<16)-1)/500)
-#define SCALE_MPU6050FLEX_GYRO_FS_SEL_500 	66 //~(((1<<16)-1)/1000)
-#define SCALE_MPU6050FLEX_GYRO_FS_SEL_1000 	33 //~(((1<<16)-1)/2000)
-#define SCALE_MPU6050FLEX_GYRO_FS_SEL_2000 	16 //~(((1<<16)-1)/4000)
-#define SCALE_MPU6050FLEX_ACC_FS_SEL_2		16383 //~(((1<<16)-1)/4)
-#define SCALE_MPU6050FLEX_ACC_FS_SEL_4		8192 //~(((1<<16)-1)/8)
-#define SCALE_MPU6050FLEX_ACC_FS_SEL_8		4096 //~(((1<<16)-1)/16)
-#define SCALE_MPU6050FLEX_ACC_FS_SEL_16		2048 //~(((1<<16)-1)/32)
+#define SCALE_MPU6050FLEX_GYRO_FS_SEL_250 	131.07 //~(((1<<16)-1)/500)
+#define SCALE_MPU6050FLEX_GYRO_FS_SEL_500 	65.54 //~(((1<<16)-1)/1000)
+#define SCALE_MPU6050FLEX_GYRO_FS_SEL_1000 	32.77 //~(((1<<16)-1)/2000)
+#define SCALE_MPU6050FLEX_GYRO_FS_SEL_2000 	16.38 //~(((1<<16)-1)/4000)
+#define SCALE_MPU6050FLEX_ACC_FS_SEL_2		16383.75 //~(((1<<16)-1)/4)
+#define SCALE_MPU6050FLEX_ACC_FS_SEL_4		8191.875 //~(((1<<16)-1)/8)
+#define SCALE_MPU6050FLEX_ACC_FS_SEL_8		4095.937 //~(((1<<16)-1)/16)
+#define SCALE_MPU6050FLEX_ACC_FS_SEL_16		2047.97 //~(((1<<16)-1)/32)
 
 /*Static function declarations*/
 static MPU6050Flex_Status_t Mpu6050Flex_ReplaceRegisterSegment(Mpu6050Flex_t Mpu6050Flex,uint8_t Register,uint8_t SegmentMask, uint8_t Value);
@@ -82,6 +84,11 @@ void Mpu6050Flex_Destroy(Mpu6050Flex_t Mpu6050Flex)
 uint32_t Mpu6050Flex_GetLastGyroReadTime(Mpu6050Flex_t Mpu6050Flex)
 {
 	return Mpu6050Flex->LastGyroReadTime;
+}
+
+Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetLastKnownAttitude(Mpu6050Flex_t Mpu6050Flex)
+{
+	return Mpu6050Flex->LastKnownAttitude;
 }
 
 /**
@@ -163,7 +170,7 @@ GetMsFunc_t Mpu6050Flex_GetGetMs(Mpu6050Flex_t Mpu6050Flex)
  *
  * @return currently set accelerometer scale.
  */
-int16_t Mpu6050Flex_GetAccScale(Mpu6050Flex_t Mpu6050Flex)
+float Mpu6050Flex_GetAccScale(Mpu6050Flex_t Mpu6050Flex)
 {
 	return Mpu6050Flex->AccScale;
 }
@@ -173,7 +180,7 @@ int16_t Mpu6050Flex_GetAccScale(Mpu6050Flex_t Mpu6050Flex)
  *
  * @return currently set gyro scale.
  */
-int16_t Mpu6050Flex_GetGyroScale(Mpu6050Flex_t Mpu6050Flex)
+float Mpu6050Flex_GetGyroScale(Mpu6050Flex_t Mpu6050Flex)
 {
 	return Mpu6050Flex->GyroScale;
 }
@@ -532,7 +539,7 @@ Mpu6050Flex_ImuData_t Mpu6050Flex_GetAccelData(Mpu6050Flex_t Mpu6050Flex)
 	Mpu6050Flex_ImuData_t RetData;
 
 	RetData = Mpu6050Flex_GetRawAccelData(Mpu6050Flex);
-	Mpu6050Flex_SubtractImuDataStruct(&RetData,&(Mpu6050Flex->Mpu6050ImuDataOffset.AccData));
+	Mpu6050Flex_SubtractImuDataStruct(&RetData,&(Mpu6050Flex->ImuDataOffset.AccData));
 
 	return RetData;
 }
@@ -576,7 +583,7 @@ Mpu6050Flex_ImuData_t Mpu6050Flex_GetGyroData(Mpu6050Flex_t Mpu6050Flex)
 	Mpu6050Flex_ImuData_t RetData;
 
 	RetData = Mpu6050Flex_GetRawGyroData(Mpu6050Flex);
-	Mpu6050Flex_SubtractImuDataStruct(&RetData,&(Mpu6050Flex->Mpu6050ImuDataOffset.GyroData));
+	Mpu6050Flex_SubtractImuDataStruct(&RetData,&(Mpu6050Flex->ImuDataOffset.GyroData));
 
 	return RetData;
 }
@@ -607,7 +614,7 @@ Mpu6050Flex_ImuFloatData_t Mpu6050Flex_GetGyroDataDegPerSec(Mpu6050Flex_t Mpu605
  */
 Mpu6050Flex_FullImuData_t Mpu6050Flex_GetImuDataOffsets(Mpu6050Flex_t Mpu6050Flex)
 {
-	return Mpu6050Flex->Mpu6050ImuDataOffset;
+	return Mpu6050Flex->ImuDataOffset;
 }
 /**
  * @brief Subtracts the fields of a given Mpu6050Flex_ImuData_t struct
@@ -693,10 +700,13 @@ MPU6050Flex_Status_t Mpu6050Flex_Calibrate(Mpu6050Flex_t Mpu6050Flex)
 		if (idx == POW_2(CALIBRATION_ITERATIONS_PO2) -1)
 		{
 			/*If on the last calibration read, set time of last gyro read that
-			is used in attitude computation functions*/
+			is used in attitude computation functions and set last known attitude to 0,0,0*/
 			if (Mpu6050Flex->pGetMs)
 			{
 				Mpu6050Flex->LastGyroReadTime = Mpu6050Flex->pGetMs();
+				Mpu6050Flex->LastKnownAttitude.Pitch = 0.0;
+				Mpu6050Flex->LastKnownAttitude.Yaw = 0.0;
+				Mpu6050Flex->LastKnownAttitude.Roll = 0.0;
 			}
 			else
 			{
@@ -721,7 +731,7 @@ MPU6050Flex_Status_t Mpu6050Flex_Calibrate(Mpu6050Flex_t Mpu6050Flex)
 	}
 	/*Compute average data offsets for both gyro and accelerometer data ~
 	 * and write it in static imu data offset struct*/
-	Mpu6050Flex_DivideFullImuDataStruct(&(Mpu6050Flex->Mpu6050ImuDataOffset),&TempFullImuData,CALIBRATION_ITERATIONS_PO2);
+	Mpu6050Flex_DivideFullImuDataStruct(&(Mpu6050Flex->ImuDataOffset),&TempFullImuData,CALIBRATION_ITERATIONS_PO2);
 
 	return Status;
 }
@@ -750,22 +760,70 @@ MPU6050Flex_Status_t Mpu6050Flex_WakeUp(Mpu6050Flex_t Mpu6050Flex)
 	return Status;
 }
 
-Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetEuler(Mpu6050Flex_t Mpu6050Flex)
+static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetAccEuler(Mpu6050Flex_ImuData_t* pAccelData)
 {
-	Mpu6050Flex_EulerAngles_t RetEuler;
-	return RetEuler;
+	Mpu6050Flex_EulerAngles_t Euler;
+
+	Euler.Roll = (atanf((pAccelData->DataY)/sqrtf(powf((pAccelData->DataX),2)+powf((pAccelData->DataZ),2))) * 180 / M_PI);
+	Euler.Pitch =  (atanf(-1 * (pAccelData->DataX) / sqrtf(powf((pAccelData->DataY), 2) + powf((pAccelData->DataZ), 2))) * 180 / M_PI);
+	Euler.Yaw = 0;
+
+	return Euler;
 }
 
-//Function to return euler
+static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetGyroEuler(Mpu6050Flex_t Mpu6050Flex, Mpu6050Flex_ImuData_t* pGyroData)
+{
+	Mpu6050Flex_EulerAngles_t Euler = {0};
 
-	//gets acc
-	//gets gyro
-	//gets ellapsed time
-	//set last gyro read
-	//gets acc euler
-	//gets gyro euler
-	//gets filtered attitude
-	//set last attitude
+	uint32_t CurrentTime;
+	float EllapsedTime;
 
-//static Function for calculating acc euler from acc data (target euler struct, accx, accy, accz)
-//static Function for calculating acc euler from gyro data (target euler struct, accx, accy, accz,ellapsed time,last known attitude)
+	if (Mpu6050Flex->pGetMs)
+	{
+		CurrentTime = Mpu6050Flex->pGetMs();
+		EllapsedTime = (CurrentTime - Mpu6050Flex->LastGyroReadTime)/1000.0;
+		Mpu6050Flex->LastGyroReadTime = CurrentTime;
+		Euler.Roll = Mpu6050Flex->LastKnownAttitude.Roll + EllapsedTime*(pGyroData->DataX/Mpu6050Flex->GyroScale);
+		Euler.Pitch = Mpu6050Flex->LastKnownAttitude.Pitch + EllapsedTime*(pGyroData->DataY/Mpu6050Flex->GyroScale);
+		Euler.Yaw = Mpu6050Flex->LastKnownAttitude.Yaw + EllapsedTime*(pGyroData->DataZ/Mpu6050Flex->GyroScale);
+	}
+
+	return Euler;
+}
+
+static Mpu6050Flex_EulerAngles_t Mpu6050Flex_ComplementaryFilterEuler(	Mpu6050Flex_t Mpu6050Flex,
+																		Mpu6050Flex_EulerAngles_t* pAccEuler,
+																		Mpu6050Flex_EulerAngles_t* pGyroEuler)
+{
+	Mpu6050Flex_EulerAngles_t FilteredEuler;
+
+	FilteredEuler.Roll = pAccEuler->Roll*Mpu6050Flex->AccCFCoefficient+pGyroEuler->Roll*Mpu6050Flex->GyroCFCoefficient;
+	FilteredEuler.Pitch = pAccEuler->Pitch*Mpu6050Flex->AccCFCoefficient+pGyroEuler->Pitch*Mpu6050Flex->GyroCFCoefficient;
+	FilteredEuler.Yaw = pGyroEuler->Yaw;
+
+	return FilteredEuler;
+}
+
+
+Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetEuler(Mpu6050Flex_t Mpu6050Flex)
+{
+
+	Mpu6050Flex_EulerAngles_t AccEuler;
+	Mpu6050Flex_EulerAngles_t GyroEuler;
+	Mpu6050Flex_EulerAngles_t FilteredEuler;
+
+	Mpu6050Flex_ImuData_t GyroData;
+	Mpu6050Flex_ImuData_t AccData;
+
+	GyroData = Mpu6050Flex_GetGyroData(Mpu6050Flex);
+	AccData = Mpu6050Flex_GetAccelData(Mpu6050Flex);
+
+	AccEuler = Mpu6050Flex_GetAccEuler(&AccData);
+	GyroEuler = Mpu6050Flex_GetGyroEuler(Mpu6050Flex,&GyroData);
+
+	FilteredEuler = Mpu6050Flex_ComplementaryFilterEuler(Mpu6050Flex,&AccEuler,&GyroEuler);
+
+	Mpu6050Flex->LastKnownAttitude = FilteredEuler;
+
+	return FilteredEuler;
+}
