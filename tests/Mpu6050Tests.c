@@ -4,6 +4,7 @@
 
 #include "Mpu6050_MockIO.h"
 #include <stdbool.h>
+#include <math.h>
 
 /*This needs refactoring obviously*/
 /*Tests for strange conditions like sensor being saturated (or close) during
@@ -27,6 +28,8 @@ uint16_t CalibOffsetData[6] = {0x0800,0x0100,0x0E05,0x0100,0x0300,0x5F01-0x4000}
 
 uint16_t GyroDataOut16bitAfterCalib[3] = {0x1122-0x0800,0x3344-0x0100,0x5566-0x0E05};
 uint16_t AccDataOut16bitAfterCalib[3] = {0x1122-0x0100,0x3344-0x0300,0x5566-(0x5F01-0x4000)};
+
+
 
 static Mpu6050Flex_t Mpu6050;
 
@@ -184,6 +187,14 @@ TEST_TEAR_DOWN(Mpu6050SetupTests)
 	MockMpu6050IO_Destroy();
 	Mpu6050Flex_Destroy(Mpu6050);
 
+}
+
+TEST(Mpu6050SetupTests,DefaultParametersArentEmpty)
+{
+	TEST_ASSERT_EQUAL(Mpu6050Flex_GetAccCFCoeff(Mpu6050),0.02);
+	TEST_ASSERT_EQUAL(Mpu6050Flex_GetGyroCFCoeff(Mpu6050),0.98);
+	TEST_ASSERT_EQUAL(Mpu6050Flex_GetAccScale(Mpu6050),16383);
+	TEST_ASSERT_EQUAL(Mpu6050Flex_GetGyroScale(Mpu6050),131);
 }
 
 /**
@@ -495,7 +506,6 @@ TEST(Mpu6050CalibratedTests,GetGyroDataFollowsCorrectOrderAndReturnsExpectedData
 
 	ActualGyroData = Mpu6050Flex_GetGyroData(Mpu6050);
 
-	printf("Output Gyro Data: [0x%.4x][0x%.4x][0x%.4x]\n",ActualGyroData.DataX,ActualGyroData.DataY,ActualGyroData.DataZ);
 	TEST_ASSERT(CompareDataStructs(&ExpectedGyroData,&ActualGyroData));
 
 }
@@ -512,18 +522,74 @@ TEST(Mpu6050CalibratedTests,GetAccDataFollowsCorrectOrderAndReturnsExpectedData)
 
 	ActualAccData = Mpu6050Flex_GetAccelData(Mpu6050);
 
-	printf("Output Acc Data: [0x%.4x][0x%.4x][0x%.4x]\n",ActualAccData.DataX,ActualAccData.DataY,ActualAccData.DataZ);
 	TEST_ASSERT(CompareDataStructs(&ExpectedAccData,&ActualAccData));
 
 }
 
+TEST_GROUP(Mpu6050AttitudeTests);
 
-TEST(Mpu6050CalibratedTests,GetEulerFollowsCorrectOrderAndReturnsExpectedData)
+TEST_SETUP(Mpu6050AttitudeTests)
 {
+	MockMpu6050IO_Create(20);
+	Mpu6050 = Mpu6050Flex_Create();
+
+	Mpu6050Flex_SetIORead(Mpu6050,MockMpu6050IO_ReadAndReturn);
+	Mpu6050Flex_SetIOWrite(Mpu6050,MockMpu6050IO_Write);
+	Mpu6050Flex_SetDelay(Mpu6050,MockMpu6050_Delay);
+	Mpu6050Flex_SetGetMs(Mpu6050,MockMpu6050_GetMs);
+
+	SetupCalibrationExpectations();
+	Mpu6050Flex_Calibrate(Mpu6050);
+
+}
+
+TEST_TEAR_DOWN(Mpu6050AttitudeTests)
+{
+	MockMpu6050IO_VerifyComplete();
+	MockMpu6050IO_Destroy();
+	Mpu6050Flex_Destroy(Mpu6050);
+}
+
+TEST(Mpu6050AttitudeTests,GetEulerFollowsCorrectOrderAndReturnsExpectedData)
+{
+
+	float CalibAccEuler[3] = {0.0,0.0,0.0};
+	float CalibGyroEuler[3] = {0.0,0.0,0.0};
+	float ExpectedAccEuler[3] = {1.0,0.0,0.0};
+	float ExpectedGyroEuler[3] = {1.0,0.0,0.0};
+	float ExpectedFilterEuler[3] = {1.0,0.0,0.0};
+
+	/*accAngleX = (atan(AccY / sqrt(pow(AccX, 2) + pow(AccZ, 2))) * 180 / PI) - 0.58; // AccErrorX ~(0.58) See the calculate_IMU_error()custom function for more details
+	  accAngleY = (atan(-1 * AccX / sqrt(pow(AccY, 2) + pow(AccZ, 2))) * 180 / PI) + 1.58; // AccErrorY ~(-1.58)
+	gyroAngleX = gyroAngleX + GyroX * elapsedTime;
+	 gyroAngleY = gyroAngleY + GyroY * elapsedTime;
+	 yaw =  yaw + GyroZ * elapsedTime;
+	 euler = coeef*gyro*/
 
 	/*Expected read of 6 data bytes*/
 	MockMpu6050IO_ExpectReadAndReturn(0x43,6,DataOut);
 	MockMpu6050IO_ExpectReadAndReturn(0x3B,6,DataOut);
+	MockMpu6050IO_ExpectGetMsAndReturn(30);
+
+	ExpectedAccEuler[0] = (atanf(AccDataOut16bitAfterCalib[1] / sqrtf(powf(AccDataOut16bitAfterCalib[0], 2) + powf(AccDataOut16bitAfterCalib[2], 2))) * 180 / M_PI);
+	ExpectedAccEuler[1] = (atanf(-1 * AccDataOut16bitAfterCalib[0] / sqrtf(powf(AccDataOut16bitAfterCalib[1], 2) + powf(AccDataOut16bitAfterCalib[2], 2))) * 180 / M_PI);
+	ExpectedAccEuler[2] = 0;
+
+	uint32_t EllapsedTime = 30-25;
+	ExpectedGyroEuler[0]= (CalibGyroEuler[0]/131)+AccDataOut16bitAfterCalib[0]*5;
+	ExpectedGyroEuler[1]= (CalibGyroEuler[1]/131)+AccDataOut16bitAfterCalib[1]*5;
+	ExpectedGyroEuler[2]= (CalibGyroEuler[2]/131)+AccDataOut16bitAfterCalib[2]*5;
+
+	ExpectedFilterEuler[0] = 0.02*ExpectedAccEuler[0]+0.98*ExpectedAccEuler[0];
+	ExpectedFilterEuler[1] = 0.02*ExpectedAccEuler[1]+0.98*ExpectedAccEuler[1];
+	ExpectedFilterEuler[2] = 0.02*ExpectedAccEuler[2]+0.98*ExpectedAccEuler[2];
+
+	Mpu6050Flex_EulerAngles_t RetEuler;
+	RetEuler = Mpu6050Flex_GetEuler(Mpu6050);
+
+	TEST_ASSERT_EQUAL_FLOAT(ExpectedFilterEuler[0],RetEuler.Roll);
+	TEST_ASSERT_EQUAL_FLOAT(ExpectedFilterEuler[1],RetEuler.Pitch);
+	TEST_ASSERT_EQUAL_FLOAT(ExpectedFilterEuler[2],RetEuler.Yaw);
 
 	//test that returned euler angles are correct for data out set in the beginning of this file
 	//considering last gyro time and last known attitude are set during calibration
@@ -531,5 +597,4 @@ TEST(Mpu6050CalibratedTests,GetEulerFollowsCorrectOrderAndReturnsExpectedData)
 }
 
 //TEST: get euler sets last known attitude and last gyro read time
-
 

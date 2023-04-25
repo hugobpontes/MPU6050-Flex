@@ -201,6 +201,7 @@ float Mpu6050Flex_GetAccCFCoeff(Mpu6050Flex_t Mpu6050Flex);
 MPU6050Flex_Status_t Mpu6050Flex_Sleep(Mpu6050Flex_t Mpu6050Flex);
 MPU6050Flex_Status_t Mpu6050Flex_WakeUp(Mpu6050Flex_t Mpu6050Flex);
 uint32_t Mpu6050Flex_GetLastGyroReadTime(Mpu6050Flex_t Mpu6050Flex);
+Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetEuler(Mpu6050Flex_t Mpu6050Flex);
 
 #endif /* MPU6050FLEX_H_ */
 

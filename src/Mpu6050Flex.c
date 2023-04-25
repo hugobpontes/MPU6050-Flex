@@ -60,6 +60,11 @@ Mpu6050Flex_t Mpu6050Flex_Create()
 	Mpu6050Flex_t Mpu6050Flex;
 	Mpu6050Flex = (Mpu6050Flex_t) malloc(sizeof(Mpu6050FlexStruct_t));
 
+	Mpu6050Flex->AccCFCoefficient = 0.02;
+	Mpu6050Flex->GyroCFCoefficient = 0.98;
+	Mpu6050Flex->AccScale = SCALE_MPU6050FLEX_ACC_FS_SEL_2;
+	Mpu6050Flex->GyroScale = SCALE_MPU6050FLEX_GYRO_FS_SEL_250;
+
 	return Mpu6050Flex;
 }
 
@@ -743,6 +748,12 @@ MPU6050Flex_Status_t Mpu6050Flex_WakeUp(Mpu6050Flex_t Mpu6050Flex)
 	Status = Mpu6050Flex_UpdateParameter(Mpu6050Flex,MPU6050FLEX_SLEEP_WAKE,MPU6050FLEX_SLEEP_MSK,REG_PWR_MGMT_1);
 
 	return Status;
+}
+
+Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetEuler(Mpu6050Flex_t Mpu6050Flex)
+{
+	Mpu6050Flex_EulerAngles_t RetEuler;
+	return RetEuler;
 }
 
 //Function to return euler
