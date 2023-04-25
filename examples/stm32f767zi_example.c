@@ -123,7 +123,7 @@ int main(void)
 
 		char Msg[50];
 		sprintf(Msg,"Roll: %.2f, Pitch: %.2f, Yaw: %.2f\n",RetEuler.Roll,RetEuler.Pitch,RetEuler.Yaw);
-		HAL_UART_Transmit(&huart4, (uint8_t *)Msg, 40, HAL_MAX_DELAY);
+		HAL_UART_Transmit(&huart4, (uint8_t *)Msg, 38, HAL_MAX_DELAY);
 
 		HAL_Delay(100);
 	}
