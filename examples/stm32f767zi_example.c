@@ -1,67 +1,34 @@
-/* USER CODE BEGIN Header */
-/**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2023 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
-/* USER CODE END Header */
-/* Includes ------------------------------------------------------------------*/
+
 #include <Mpu6050Flex.h>
 #include "main.h"
 
 #include <stdlib.h>
 #include <string.h>
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
+#include <stdarg.h>
+#include <stdio.h>
 
-/* USER CODE END Includes */
-
-/* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN PTD */
-
-/* USER CODE END PTD */
-
-/* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
-/* USER CODE END PD */
-
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-/* USER CODE END PM */
-
-/* Private variables ---------------------------------------------------------*/
 
 I2C_HandleTypeDef hi2c2;
 
 UART_HandleTypeDef huart4;
 
-/* USER CODE BEGIN PV */
-
-/* USER CODE END PV */
-
-/* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C2_Init(void);
 static void MX_UART4_Init(void);
-/* USER CODE BEGIN PFP */
 
-/* USER CODE END PFP */
+/*Function to facilitate debugging through uart2, adapt to your needs */
+int stm32_printf(const char *format, ...)
+{
+    char str[200];
+    va_list args;
+    va_start(args, format);
+    int n = vsprintf(str, format, args);
+    va_end(args);
+    HAL_UART_Transmit(&huart4, (uint8_t *)str, n, HAL_MAX_DELAY);
+    return n;
+}
 
-/* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
 static IOStatus_t Stm32f767zi_I2C_Write(uint8_t Address,uint32_t Size,uint8_t* DataPtr)
 {
 
@@ -83,6 +50,16 @@ static IOStatus_t Stm32f767zi_I2C_Write(uint8_t Address,uint32_t Size,uint8_t* D
 	return Status;
 }
 
+static void Stm32f767zi_Delay(uint32_t ms)
+{
+	HAL_Delay(ms);
+}
+
+static uint32_t Stm32f767zi_GetMs()
+{
+	return HAL_GetTick();
+}
+
 static IOStatus_t Stm32f767zi_I2C_Read(uint8_t Address,uint32_t Size,uint8_t* DataPtr)
 {
 	IOStatus_t Status = IO_SUCCESS;
@@ -101,81 +78,59 @@ static IOStatus_t Stm32f767zi_I2C_Read(uint8_t Address,uint32_t Size,uint8_t* Da
 	return Status;
 }
 
-/* USER CODE END 0 */
-
-/**
-  * @brief  The application entry point.
-  * @retval int
-  */
 int main(void)
 {
-  /* USER CODE BEGIN 1 */
+	HAL_Init();
+	SystemClock_Config();
+	MX_GPIO_Init();
+	MX_I2C2_Init();
+	MX_UART4_Init();
 
-  /* USER CODE END 1 */
+	Mpu6050Flex_t Mpu6050;
 
-  /* MCU Configuration--------------------------------------------------------*/
+	Mpu6050 = Mpu6050Flex_Create();
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+	stm32_printf("----------Welcome to Mpu6050 Flex----------\n");
 
-  /* USER CODE BEGIN Init */
+	Mpu6050Flex_SetIOWrite(Mpu6050,Stm32f767zi_I2C_Write);
+	Mpu6050Flex_SetIORead(Mpu6050,Stm32f767zi_I2C_Read);
+	Mpu6050Flex_SetGetMs(Mpu6050,Stm32f767zi_GetMs);
+	Mpu6050Flex_SetDelay(Mpu6050,Stm32f767zi_Delay);
 
-  /* USER CODE END Init */
+	uint8_t ID;
+	ID = Mpu6050Flex_WhoAmI(Mpu6050);
 
-  /* Configure the system clock */
-  SystemClock_Config();
+	if (ID == MPU6050_I2C_ADDRESS)
+	{
+		stm32_printf("MPU6050 Found!\n");
+	}
+	else
+	{
+		stm32_printf("ERROR! MPU6050 Not Found!\n");
+	}
 
-  /* USER CODE BEGIN SysInit */
+	stm32_printf("Calibrating...\n");
+	Mpu6050Flex_Calibrate(Mpu6050);
+	stm32_printf("Waking up...\n");
+	Mpu6050Flex_WakeUp(Mpu6050);
+	stm32_printf("Ready!!!\n");
 
-  /* USER CODE END SysInit */
+	while (1)
+	{
 
-  /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_I2C2_Init();
-  MX_UART4_Init();
-  /* USER CODE BEGIN 2 */
+		Mpu6050Flex_EulerAngles_t RetEuler;
+		RetEuler = Mpu6050Flex_GetEuler(Mpu6050);
 
-  uint8_t RcvdData = 0xEE;
-  HAL_UART_Transmit(&huart4, &RcvdData, 1, 100);
+		char Msg[50];
+		sprintf(Msg,"Roll: %.2f, Pitch: %.2f, Yaw: %.2f\n",RetEuler.Roll,RetEuler.Pitch,RetEuler.Yaw);
+		HAL_UART_Transmit(&huart4, (uint8_t *)Msg, 40, HAL_MAX_DELAY);
 
-  Mpu6050Flex_SetIOWrite(Stm32f767zi_I2C_Write);
-  Mpu6050Flex_SetIORead(Stm32f767zi_I2C_Read);
+		HAL_Delay(100);
+	}
 
-  uint8_t ID;
-  ID = Mpu6050Flex_WhoAmI();
-  HAL_UART_Transmit(&huart4, &ID, 1, 100);
-
- Mpu6050Flex_WakeUp();
- Mpu6050Flex_ConfigSampleRateDivider(0xCC);
-  /* USER CODE END 2 */
-uint8_t RxData = 0xDE;
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
-  while (1)
-  {
-
-
-	  Stm32f767zi_I2C_Read(REG_SMPRT_DIV,1,&RxData);
-	  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_7);
-	  HAL_UART_Transmit(&huart4, &RxData, 1, 100);
-
-	  /*Stm32f767zi_I2C_Read(REG_WHO_AM_I,1,&RxData);
-	  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_7);
-	  HAL_UART_Transmit(&huart4, &RxData, 1, 100);*/
-
-	  HAL_Delay(500);
-    /* USER CODE END WHILE */
-
-
-    /* USER CODE BEGIN 3 */
-  }
-  /* USER CODE END 3 */
 }
 
-/**
-  * @brief System Clock Configuration
-  * @retval None
-  */
+
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
@@ -220,14 +175,6 @@ void SystemClock_Config(void)
   */
 static void MX_I2C2_Init(void)
 {
-
-  /* USER CODE BEGIN I2C2_Init 0 */
-
-  /* USER CODE END I2C2_Init 0 */
-
-  /* USER CODE BEGIN I2C2_Init 1 */
-
-  /* USER CODE END I2C2_Init 1 */
   hi2c2.Instance = I2C2;
   hi2c2.Init.Timing = 0x00303D5B;
   hi2c2.Init.OwnAddress1 = 0;
@@ -255,9 +202,6 @@ static void MX_I2C2_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN I2C2_Init 2 */
-
-  /* USER CODE END I2C2_Init 2 */
 
 }
 
@@ -269,13 +213,6 @@ static void MX_I2C2_Init(void)
 static void MX_UART4_Init(void)
 {
 
-  /* USER CODE BEGIN UART4_Init 0 */
-
-  /* USER CODE END UART4_Init 0 */
-
-  /* USER CODE BEGIN UART4_Init 1 */
-
-  /* USER CODE END UART4_Init 1 */
   huart4.Instance = UART4;
   huart4.Init.BaudRate = 115200;
   huart4.Init.WordLength = UART_WORDLENGTH_8B;
@@ -290,10 +227,6 @@ static void MX_UART4_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN UART4_Init 2 */
-
-  /* USER CODE END UART4_Init 2 */
-
 }
 
 /**
@@ -323,23 +256,16 @@ static void MX_GPIO_Init(void)
 
 }
 
-/* USER CODE BEGIN 4 */
-
-/* USER CODE END 4 */
-
 /**
   * @brief  This function is executed in case of error occurrence.
   * @retval None
   */
 void Error_Handler(void)
 {
-  /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
   while (1)
   {
   }
-  /* USER CODE END Error_Handler_Debug */
 }
 
 #ifdef  USE_FULL_ASSERT
@@ -352,9 +278,6 @@ void Error_Handler(void)
   */
 void assert_failed(uint8_t *file, uint32_t line)
 {
-  /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-  /* USER CODE END 6 */
+
 }
 #endif /* USE_FULL_ASSERT */

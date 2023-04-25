@@ -56,6 +56,12 @@ static MPU6050Flex_Status_t Mpu6050Flex_UpdateParameter(Mpu6050Flex_t Mpu6050Fle
 static void Mpu6050Flex_AccumulateFullImuDataStruct(Mpu6050Flex_FullImuData32_t* pDest, Mpu6050Flex_ImuData_t* pAccData, Mpu6050Flex_ImuData_t* pGyroData);
 static void Mpu6050Flex_DivideFullImuDataStruct(Mpu6050Flex_FullImuData_t* pDest, Mpu6050Flex_FullImuData32_t* pOrig, uint8_t RightShift);
 static void Mpu6050Flex_SubtractImuDataStruct(Mpu6050Flex_ImuData_t* pA, Mpu6050Flex_ImuData_t* pB);
+static Mpu6050Flex_EulerAngles_t Mpu6050Flex_ComplementaryFilterEuler(	Mpu6050Flex_t Mpu6050Flex,
+																		Mpu6050Flex_EulerAngles_t* pAccEuler,
+																		Mpu6050Flex_EulerAngles_t* pGyroEuler);
+static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetAccEuler(Mpu6050Flex_ImuData_t* pAccelData);
+static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetGyroEuler(Mpu6050Flex_t Mpu6050Flex, Mpu6050Flex_ImuData_t* pGyroData);
+
 
 Mpu6050Flex_t Mpu6050Flex_Create()
 {
@@ -510,9 +516,9 @@ static Mpu6050Flex_ImuData_t Mpu6050Flex_GetImuData(Mpu6050Flex_t Mpu6050Flex, u
 			if (Mpu6050Flex->pIORead(DataRegister,6,SerializedData) == IO_SUCCESS)
 			{
 				/*Copy serialized bytes into struct */
-				memcpy(&(ImuData.DataX),SerializedData,2);
-				memcpy(&(ImuData.DataY),SerializedData+2,2);
-				memcpy(&(ImuData.DataZ),SerializedData+4,2);
+				ImuData.DataX = SerializedData[0] << 8 | SerializedData[1];
+				ImuData.DataY = SerializedData[2] << 8 | SerializedData[3];
+				ImuData.DataZ = SerializedData[4] << 8 | SerializedData[5];
 			}
 		}
 	}
