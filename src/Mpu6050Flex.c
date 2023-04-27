@@ -7,7 +7,7 @@
  ********************************************************************************
  */
 
-#include <Mpu6050Flex.h>
+#include "Mpu6050Flex.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -19,14 +19,14 @@
  */
 typedef struct Mpu6050FlexStruct
 {
-	IOFunc_t pIOWrite; /**< Pointer to the function used to write bytes to the mpu6050 registers */
-	IOFunc_t pIORead;  /**< Pointer to the function used to read bytes from the mpu6050 registers */
-	DelayFunc_t pDelay;/**< Pointer to the function used delay a given amount of ms */
-	GetMsFunc_t pGetMs;/**< Pointer used to obtain ms since start of program */
-	float AccScale;/**< Scale by which accelerometer data must be divided to convert it to g's */
-	float GyroScale;/**< Scale by which accelerometer data must be divided to convert it to deg/s */
-	float AccCFCoefficient; /**< Complimentary filter coefficient corresponding to the accelerometer readings */
-	float GyroCFCoefficient; /**< Complimentary filter coefficient corresponding to the gyro readings */
+	IOFunc_t pIOWrite; /** Pointer to the function used to write bytes to the mpu6050 registers */
+	IOFunc_t pIORead;  /** Pointer to the function used to read bytes from the mpu6050 registers */
+	DelayFunc_t pDelay;/** Pointer to the function used delay a given amount of ms */
+	GetMsFunc_t pGetMs;/** Pointer used to obtain ms since start of program */
+	float AccScale;/** Scale by which accelerometer data must be divided to convert it to g's */
+	float GyroScale;/** Scale by which accelerometer data must be divided to convert it to deg/s */
+	float AccCFCoefficient; /** Complimentary filter coefficient corresponding to the accelerometer readings */
+	float GyroCFCoefficient; /** Complimentary filter coefficient corresponding to the gyro readings */
 	Mpu6050Flex_FullImuData_t ImuDataOffset; /*Struct containing 3 axis calibration offset for both accelerometer and gyro data */
 	uint32_t LastKnownAttitudeTime; /*ms since start of program in which last attitude measurement was taken */
 	Mpu6050Flex_EulerAngles_t LastKnownAttitude; /*Euler angle struct containing last known attitude */
@@ -61,8 +61,11 @@ static Mpu6050Flex_EulerAngles_t Mpu6050Flex_ComplementaryFilterEuler(	Mpu6050Fl
 static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetAccEulerFromAccData(Mpu6050Flex_ImuData_t* pAccelData);
 static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetGyroEulerFromGyroData(Mpu6050Flex_t Mpu6050Flex, Mpu6050Flex_ImuData_t* pGyroData, float EllapsedTime);
 
-/* Allocate memory for Mpu6050FlexStruct_t containing all mpu6050 parameters
+/**
+ * @brief Allocate memory for Mpu6050FlexStruct_t containing all mpu6050 parameters
  * This functions allows user of this library to use Mpu6050FlexStruct_t in an abstracted way
+ *
+ * @return pointer to memory allocated to Mpu6050FlexStruct_t, acts as a mpu6050flex handle
  */
 Mpu6050Flex_t Mpu6050Flex_Create()
 {
@@ -76,12 +79,15 @@ Mpu6050Flex_t Mpu6050Flex_Create()
 
 	return Mpu6050Flex;
 }
-/* Free memory previously allocated to an Mpu6050FlexStruct_t containing all mpu6050 parameters*/
+/**
+ * @brief Free memory held by Mpu6050FlexStruct_t containing all mpu6050 parameters
+ *
+ * @param Mpu6050Flex handle for the used Mpu6050Flex instance
+ */
 void Mpu6050Flex_Destroy(Mpu6050Flex_t Mpu6050Flex)
 {
 	free(Mpu6050Flex);
 }
-
 
 /**
  * @brief Gets the time (in ms since program start) of the Last Known Attitude measurement used for attitude computation
