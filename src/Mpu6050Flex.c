@@ -62,7 +62,7 @@ static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetAccEulerFromAccData(Mpu6050Flex_
 static Mpu6050Flex_EulerAngles_t Mpu6050Flex_GetGyroEulerFromGyroData(Mpu6050Flex_t Mpu6050Flex, Mpu6050Flex_ImuData_t* pGyroData, float EllapsedTime);
 
 /**
- * @brief Allocate memory for Mpu6050FlexStruct_t containing all mpu6050 parameters
+ * @brief Create mpu6050 instance by allocating memory for Mpu6050FlexStruct_t containing all mpu6050 parameters
  * This functions allows user of this library to use Mpu6050FlexStruct_t in an abstracted way
  *
  * @return pointer to memory allocated to Mpu6050FlexStruct_t, acts as a mpu6050flex handle
@@ -80,7 +80,7 @@ Mpu6050Flex_t Mpu6050Flex_Create()
 	return Mpu6050Flex;
 }
 /**
- * @brief Free memory held by Mpu6050FlexStruct_t containing all mpu6050 parameters
+ * @brief Destroy mpu6050 instance by freeing memory held by Mpu6050FlexStruct_t containing all mpu6050 parameters
  *
  * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  */
@@ -904,7 +904,7 @@ static Mpu6050Flex_EulerAngles_t Mpu6050Flex_ComplementaryFilterEuler(	Mpu6050Fl
 
 /**
  * @brief Obtains calibrated gyro and accelerometer data and converts it to two sets of euler angles
- * then filters them to obtain a final euler angle estimate
+ * then filters them to obtain a final euler angle estimate. Mpu6050 needs to be calibrated
  *
  * @param Mpu6050Flex handle for the used Mpu6050Flex instance
  *
